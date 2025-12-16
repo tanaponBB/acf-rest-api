@@ -4,7 +4,7 @@
  * Plugin URI: https://example.com/plugins/acf-rest-api
  * Description: Extends WordPress REST API with ACF Options and GTM Tracking endpoints. Provides GET/POST routes for managing ACF option fields and GTM tracking settings.
  * Version: 1.0.0
- * Author: Your Name
+ * Author: TanaponBB
  * Author URI: https://example.com
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -22,6 +22,18 @@ if (!defined('ABSPATH')) {
 define('ACF_REST_API_VERSION', '1.0.0');
 define('ACF_REST_API_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ACF_REST_API_PLUGIN_URL', plugin_dir_url(__FILE__));
+
+/**
+ * Auto-Update Configuration
+ * 
+ * Set your Google Cloud Storage bucket URL here.
+ * The URL should point to a JSON file containing plugin update information.
+ * 
+ * Example: https://storage.googleapis.com/your-bucket-name/acf-rest-api/plugin-info.json
+ */
+if (!defined('ACF_REST_API_UPDATE_URL')) {
+    define('ACF_REST_API_UPDATE_URL', 'https://storage.googleapis.com/YOUR_BUCKET_NAME/acf-rest-api/plugin-info.json');
+}
 
 /**
  * Main Plugin Class
@@ -65,6 +77,7 @@ class ACF_REST_API_Plugin {
         
         // Admin notices
         add_action('admin_notices', [$this, 'check_dependencies']);
+        add_action('admin_notices', [$this, 'show_update_check_notice']);
     }
 
     /**
@@ -74,6 +87,7 @@ class ACF_REST_API_Plugin {
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-options-api.php';
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-gtm-tracking.php';
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-rest-endpoints.php';
+        require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-plugin-updater.php';
     }
 
     /**
@@ -88,6 +102,11 @@ class ACF_REST_API_Plugin {
         // Initialize Options API
         if (class_exists('ACF_REST_Options_API')) {
             ACF_REST_Options_API::get_instance();
+        }
+
+        // Initialize Auto-Updater
+        if (class_exists('ACF_REST_Plugin_Updater')) {
+            ACF_REST_Plugin_Updater::get_instance();
         }
     }
 
@@ -118,6 +137,22 @@ class ACF_REST_API_Plugin {
     }
 
     /**
+     * Show notice after manual update check
+     */
+    public function show_update_check_notice() {
+        if (isset($_GET['acf_rest_api_checked'])) {
+            ?>
+            <div class="notice notice-success is-dismissible">
+                <p>
+                    <strong><?php _e('ACF REST API Extended:', 'acf-rest-api'); ?></strong>
+                    <?php _e('Update check completed. If an update is available, it will appear below.', 'acf-rest-api'); ?>
+                </p>
+            </div>
+            <?php
+        }
+    }
+
+    /**
      * Plugin activation
      */
     public static function activate() {
@@ -134,6 +169,9 @@ class ACF_REST_API_Plugin {
      * Plugin deactivation
      */
     public static function deactivate() {
+        // Clear update cache
+        delete_transient('acf_rest_api_update_data');
+        
         flush_rewrite_rules();
     }
 

@@ -1,0 +1,28 @@
+{
+    "name": "ACF REST API Extended",
+    "slug": "acf-rest-api",
+    "version": "1.0.0",
+    "author": "<a href='https://example.com'>Your Name</a>",
+    "author_profile": "https://example.com",
+    "homepage": "https://example.com/plugins/acf-rest-api",
+    "requires": "5.8",
+    "tested": "6.4",
+    "requires_php": "7.4",
+    "downloaded": 0,
+    "last_updated": "2025-01-01 00:00:00",
+    "download_url": "https://storage.googleapis.com/YOUR_BUCKET_NAME/acf-rest-api/acf-rest-api-1.0.0.zip",
+    "sections": {
+        "description": "<p>Extends WordPress REST API with ACF Options and GTM Tracking endpoints. Provides GET/POST routes for managing ACF option fields and GTM tracking settings.</p><h4>Features</h4><ul><li>ACF Options API - GET and POST endpoints for managing all ACF option fields</li><li>GTM Tracking - Dedicated endpoints and admin page for Google Tag Manager settings</li><li>Field Choices - Automatically includes select field choices in API responses</li><li>Sanitization - Proper sanitization of all field values based on field type</li><li>Auto-Updates - Automatic updates from your own hosting</li></ul>",
+        "installation": "<ol><li>Upload the plugin files to the <code>/wp-content/plugins/acf-rest-api</code> directory</li><li>Activate the plugin through the 'Plugins' screen in WordPress</li><li>Ensure ACF is installed and activated</li><li>Configure GTM tracking settings in the new 'GTM Tracking' admin menu</li></ol>",
+        "changelog": "<h4>1.0.0</h4><ul><li>Initial release</li><li>ACF Options REST API endpoints</li><li>GTM Tracking functionality</li><li>Admin options page for GTM settings</li><li>Auto-update support via Google Cloud Storage</li></ul>",
+        "faq": "<h4>Does this plugin require ACF Pro?</h4><p>No, this plugin works with both ACF Free and ACF Pro.</p><h4>How do I secure the API endpoints?</h4><p>By default, read operations are public and write operations require authentication. You can modify the permission callbacks in the ACF_REST_Endpoints class.</p>"
+    },
+    "banners": {
+        "low": "https://storage.googleapis.com/YOUR_BUCKET_NAME/acf-rest-api/assets/banner-772x250.png",
+        "high": "https://storage.googleapis.com/YOUR_BUCKET_NAME/acf-rest-api/assets/banner-1544x500.png"
+    },
+    "icons": {
+        "1x": "https://storage.googleapis.com/YOUR_BUCKET_NAME/acf-rest-api/assets/icon-128x128.png",
+        "2x": "https://storage.googleapis.com/YOUR_BUCKET_NAME/acf-rest-api/assets/icon-256x256.png"
+    }
+}
