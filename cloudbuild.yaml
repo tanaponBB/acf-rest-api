@@ -4,25 +4,23 @@ steps:
     args:
       - '-c'
       - |
-        # ติดตั้งเครื่องมือ
         apt-get update && apt-get install -y zip jq
         
-        # ประกาศตัวแปร Bash (ใช้ $VERSION)
-        VERSION=$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}.php | head -1)
-        echo "Building version: $VERSION"
+        # ใช้ $$ เพื่อบอก Cloud Build ว่านี่คือตัวแปรของ Bash ไม่ใช่ Substitution
+        VERSION=$$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}.php | head -1)
+        echo "Building version: $$VERSION"
         
-        # เตรียมโฟลเดอร์
         mkdir -p build/${_PLUGIN_SLUG}
         cp ${_PLUGIN_SLUG}.php build/${_PLUGIN_SLUG}/
         cp -r includes build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         cp readme.txt build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         
-        # บีบอัดไฟล์
         cd build && zip -r plugin.zip ${_PLUGIN_SLUG}
         
-        # อัปเดตไฟล์ JSON (ใช้ $VERSION ในส่วนของ jq)
         cp ../plugin-info.json . 2>/dev/null || echo '{}' > plugin-info.json
-        jq --arg v "$VERSION" \
+        
+        # ใช้ $$VERSION ตรงนี้ด้วยครับ
+        jq --arg v "$$VERSION" \
            --arg url "https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip" \
            '.version=$v|.download_url=$url' plugin-info.json > tmp.json && mv tmp.json plugin-info.json
 
@@ -41,7 +39,6 @@ substitutions:
   _PLUGIN_SLUG: 'acf-rest-api'
 
 options:
-  # แก้ปัญหา build.service_account error จากคำถามก่อนหน้า
   logging: CLOUD_LOGGING_ONLY
 
 timeout: '600s'
