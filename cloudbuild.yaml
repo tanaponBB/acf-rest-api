@@ -1,25 +1,39 @@
 # Cloud Build configuration for ACF REST API Plugin
-# Triggers on push to main/master branch
-#
+# 
 # Required substitutions (set in Cloud Build trigger):
-# - _BUCKET: Your GCS bucket name (e.g., my-wp-plugins)
-# - _PLUGIN_SLUG: Plugin folder name (default: acf-rest-api)
+# - _BUCKET: Your GCS bucket name
+# - _PLUGIN_SLUG: Plugin folder name
+#
+# IMPORTANT: Do NOT add any other substitution variables in trigger settings!
+# Only _BUCKET and _PLUGIN_SLUG are needed.
 
 steps:
-  # Step 1: Extract version from plugin header and save to file
+  # Step 1: Extract version from plugin header
   - name: 'ubuntu'
     id: 'extract-version'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        VERSION=$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}.php || echo "1.0.0")
-        if [ -z "$VERSION" ]; then
-          echo "❌ Could not extract version from ${_PLUGIN_SLUG}.php"
+        echo "=== Extracting version from ${_PLUGIN_SLUG}.php ==="
+        
+        if [ ! -f "${_PLUGIN_SLUG}.php" ]; then
+          echo "❌ Error: ${_PLUGIN_SLUG}.php not found!"
+          echo "Files in current directory:"
+          ls -la
           exit 1
         fi
-        echo "✅ Detected version: $VERSION"
-        echo "$VERSION" > /workspace/version.txt
+        
+        EXTRACTED_VERSION=$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}.php | head -1)
+        
+        if [ -z "$EXTRACTED_VERSION" ]; then
+          echo "❌ Could not extract version, using default 1.0.0"
+          EXTRACTED_VERSION="1.0.0"
+        fi
+        
+        echo "✅ Detected version: $EXTRACTED_VERSION"
+        echo "$EXTRACTED_VERSION" > /workspace/version.txt
+        cat /workspace/version.txt
 
   # Step 2: Create plugin ZIP file
   - name: 'ubuntu'
@@ -28,26 +42,32 @@ steps:
     args:
       - '-c'
       - |
+        echo "=== Creating ZIP file ==="
         apt-get update && apt-get install -y zip
-        VERSION=$(cat /workspace/version.txt)
-        echo "Creating ZIP for version $VERSION"
+        
+        PLUGIN_VERSION=$(cat /workspace/version.txt)
+        echo "Building version: $PLUGIN_VERSION"
         
         # Create build directory with plugin folder structure
         mkdir -p build/${_PLUGIN_SLUG}
         
-        # Copy all plugin files
-        cp -r ${_PLUGIN_SLUG}.php build/${_PLUGIN_SLUG}/ 2>/dev/null || true
-        cp -r includes build/${_PLUGIN_SLUG}/ 2>/dev/null || true
+        # Copy plugin files
+        cp ${_PLUGIN_SLUG}.php build/${_PLUGIN_SLUG}/ 2>/dev/null || echo "Warning: main plugin file not found"
+        cp -r includes build/${_PLUGIN_SLUG}/ 2>/dev/null || echo "Warning: includes folder not found"
         cp -r assets build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         cp -r languages build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         cp readme.txt build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         
+        # Show what will be zipped
+        echo "Files to be included in ZIP:"
+        ls -la build/${_PLUGIN_SLUG}/
+        
         # Create ZIP
         cd build
-        zip -r ${_PLUGIN_SLUG}-${VERSION}.zip ${_PLUGIN_SLUG}
-        cp ${_PLUGIN_SLUG}-${VERSION}.zip ${_PLUGIN_SLUG}-latest.zip
+        zip -r ${_PLUGIN_SLUG}-${PLUGIN_VERSION}.zip ${_PLUGIN_SLUG}
+        cp ${_PLUGIN_SLUG}-${PLUGIN_VERSION}.zip ${_PLUGIN_SLUG}-latest.zip
         
-        echo "✅ ZIP files created"
+        echo "✅ ZIP files created:"
         ls -la *.zip
 
   # Step 3: Generate plugin-info.json
@@ -57,28 +77,48 @@ steps:
     args:
       - '-c'
       - |
+        echo "=== Generating plugin-info.json ==="
         apt-get update && apt-get install -y jq
-        VERSION=$(cat /workspace/version.txt)
-        DATE=$(date -u +"%Y-%m-%d %H:%M:%S")
         
-        # Extract plugin info
+        PLUGIN_VERSION=$(cat /workspace/version.txt)
+        CURRENT_DATE=$(date -u +"%Y-%m-%d %H:%M:%S")
+        
+        # Extract plugin info from main file
         PLUGIN_FILE="${_PLUGIN_SLUG}.php"
-        PLUGIN_NAME=$(grep -oP "Plugin Name:\s*\K.+" $PLUGIN_FILE | head -1 || echo "${_PLUGIN_SLUG}")
+        PLUGIN_NAME=$(grep -oP "Plugin Name:\s*\K.+" $PLUGIN_FILE | head -1 || echo "ACF REST API Extended")
         REQUIRES_WP=$(grep -oP "Requires at least:\s*\K.+" $PLUGIN_FILE | head -1 || echo "5.8")
         REQUIRES_PHP=$(grep -oP "Requires PHP:\s*\K.+" $PLUGIN_FILE | head -1 || echo "7.4")
         TESTED_WP=$(grep -oP "Tested up to:\s*\K.+" $PLUGIN_FILE | head -1 || echo "6.4")
         
-        # Create or update plugin-info.json
+        echo "Plugin Name: $PLUGIN_NAME"
+        echo "Version: $PLUGIN_VERSION"
+        echo "Requires WP: $REQUIRES_WP"
+        echo "Requires PHP: $REQUIRES_PHP"
+        echo "Tested: $TESTED_WP"
+        
+        # Use existing plugin-info.json as base or create new
         if [ -f "plugin-info.json" ]; then
+          echo "Using existing plugin-info.json as base"
           cp plugin-info.json build/plugin-info.json
         else
-          echo '{"sections":{}}' > build/plugin-info.json
+          echo "Creating new plugin-info.json"
+          cat > build/plugin-info.json << 'JSONEOF'
+        {
+          "name": "ACF REST API Extended",
+          "slug": "acf-rest-api",
+          "sections": {
+            "description": "<p>Extends WordPress REST API with ACF Options and GTM Tracking endpoints.</p>",
+            "changelog": "<h4>1.0.0</h4><ul><li>Initial release</li></ul>"
+          }
+        }
+        JSONEOF
         fi
         
+        # Update JSON with current version info
         cd build
-        jq --arg v "$VERSION" \
-           --arg url "https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${VERSION}.zip" \
-           --arg date "$DATE" \
+        jq --arg v "$PLUGIN_VERSION" \
+           --arg url "https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${PLUGIN_VERSION}.zip" \
+           --arg date "$CURRENT_DATE" \
            --arg name "$PLUGIN_NAME" \
            --arg tested "$TESTED_WP" \
            --arg requires "$REQUIRES_WP" \
@@ -98,22 +138,26 @@ steps:
     args:
       - '-c'
       - |
-        VERSION=$(cat /workspace/version.txt)
+        echo "=== Uploading files to GCS ==="
+        PLUGIN_VERSION=$(cat /workspace/version.txt)
+        
+        echo "Uploading to gs://${_BUCKET}/${_PLUGIN_SLUG}/"
         
         # Upload versioned ZIP
-        gsutil cp build/${_PLUGIN_SLUG}-${VERSION}.zip \
-          gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${VERSION}.zip
+        gsutil cp build/${_PLUGIN_SLUG}-${PLUGIN_VERSION}.zip \
+          gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${PLUGIN_VERSION}.zip
+        echo "✅ Uploaded: ${_PLUGIN_SLUG}-${PLUGIN_VERSION}.zip"
         
         # Upload latest ZIP
         gsutil cp build/${_PLUGIN_SLUG}-latest.zip \
           gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-latest.zip
+        echo "✅ Uploaded: ${_PLUGIN_SLUG}-latest.zip"
         
-        # Upload plugin-info.json with no-cache
+        # Upload plugin-info.json with no-cache header
         gsutil -h "Cache-Control:no-cache, max-age=0" \
           cp build/plugin-info.json \
           gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json
-        
-        echo "✅ Files uploaded to GCS"
+        echo "✅ Uploaded: plugin-info.json"
 
   # Step 5: Set public access
   - name: 'gcr.io/cloud-builders/gsutil'
@@ -122,13 +166,14 @@ steps:
     args:
       - '-c'
       - |
-        VERSION=$(cat /workspace/version.txt)
+        echo "=== Setting public access ==="
+        PLUGIN_VERSION=$(cat /workspace/version.txt)
         
-        gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${VERSION}.zip || true
-        gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-latest.zip || true
-        gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json || true
+        gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${PLUGIN_VERSION}.zip 2>/dev/null || true
+        gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-latest.zip 2>/dev/null || true
+        gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json 2>/dev/null || true
         
-        echo "✅ Public access set"
+        echo "✅ Public access configured"
 
   # Step 6: Summary
   - name: 'ubuntu'
@@ -137,28 +182,33 @@ steps:
     args:
       - '-c'
       - |
-        VERSION=$(cat /workspace/version.txt)
+        PLUGIN_VERSION=$(cat /workspace/version.txt)
         
         echo ""
         echo "========================================"
-        echo "🎉 Deployment Complete!"
+        echo "   DEPLOYMENT COMPLETE!"
         echo "========================================"
         echo ""
         echo "Plugin: ${_PLUGIN_SLUG}"
-        echo "Version: $VERSION"
+        echo "Version: $PLUGIN_VERSION"
+        echo "Bucket: ${_BUCKET}"
         echo ""
-        echo "Files:"
-        echo "  • https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${VERSION}.zip"
-        echo "  • https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json"
+        echo "Files deployed:"
+        echo "  - https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${PLUGIN_VERSION}.zip"
+        echo "  - https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-latest.zip"
+        echo "  - https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json"
         echo ""
         echo "========================================"
 
-# Substitution defaults (override in trigger settings)
+# Default substitution values
+# These will be overridden by trigger settings
 substitutions:
   _BUCKET: 'tanapon-wp-plugins'
   _PLUGIN_SLUG: 'acf-rest-api'
 
+# Build options
 options:
   logging: CLOUD_LOGGING_ONLY
 
+# Timeout: 10 minutes
 timeout: '600s'
