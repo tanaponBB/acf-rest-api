@@ -32,7 +32,7 @@ define('ACF_REST_API_PLUGIN_URL', plugin_dir_url(__FILE__));
  * Example: https://storage.googleapis.com/your-bucket-name/acf-rest-api/plugin-info.json
  */
 if (!defined('ACF_REST_API_UPDATE_URL')) {
-    define('ACF_REST_API_UPDATE_URL', 'https://storage.googleapis.com/YOUR_BUCKET_NAME/acf-rest-api/plugin-info.json');
+    define('ACF_REST_API_UPDATE_URL', 'https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/plugin-info.json');
 }
 
 /**
