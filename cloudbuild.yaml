@@ -4,14 +4,14 @@ steps:
     args:
       - '-c'
       - |
-        # ติดตั้งเครื่องมือที่จำเป็น
+        # ติดตั้งเครื่องมือ
         apt-get update && apt-get install -y zip jq
         
-        # ดึง Version จากไฟล์ PHP (ใช้ $VERSION เพราะเป็น Bash Variable)
+        # ประกาศตัวแปร Bash (ใช้ $VERSION)
         VERSION=$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}.php | head -1)
         echo "Building version: $VERSION"
         
-        # สร้างโฟลเดอร์สำหรับ Pack ไฟล์
+        # เตรียมโฟลเดอร์
         mkdir -p build/${_PLUGIN_SLUG}
         cp ${_PLUGIN_SLUG}.php build/${_PLUGIN_SLUG}/
         cp -r includes build/${_PLUGIN_SLUG}/ 2>/dev/null || true
@@ -20,8 +20,7 @@ steps:
         # บีบอัดไฟล์
         cd build && zip -r plugin.zip ${_PLUGIN_SLUG}
         
-        # อัปเดตไฟล์ plugin-info.json สำหรับ WordPress Update Checker
-        # ใช้ $VERSION สำหรับ Bash และ ${_BUCKET} สำหรับ Cloud Build substitution
+        # อัปเดตไฟล์ JSON (ใช้ $VERSION ในส่วนของ jq)
         cp ../plugin-info.json . 2>/dev/null || echo '{}' > plugin-info.json
         jq --arg v "$VERSION" \
            --arg url "https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip" \
@@ -32,11 +31,8 @@ steps:
     args:
       - '-c'
       - |
-        # อัปโหลดไฟล์ไปยัง GCS
         gsutil cp build/plugin.zip gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip
         gsutil -h "Cache-Control:no-cache" cp build/plugin-info.json gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json
-        
-        # ตั้งค่าให้คนทั่วไปดาวน์โหลดได้ (Public)
         gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip || true
         gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json || true
 
@@ -45,7 +41,7 @@ substitutions:
   _PLUGIN_SLUG: 'acf-rest-api'
 
 options:
-  # แก้ปัญหา 'build.service_account' error
+  # แก้ปัญหา build.service_account error จากคำถามก่อนหน้า
   logging: CLOUD_LOGGING_ONLY
 
 timeout: '600s'
