@@ -20,9 +20,14 @@ class ACF_REST_Endpoints {
     private static $instance = null;
 
     /**
-     * REST namespace
+     * REST namespace for ACF options
      */
     const REST_NAMESPACE = 'options';
+
+    /**
+     * REST namespace for WooCommerce settings
+     */
+    const WC_NAMESPACE = 'woocommerce-ext/v1';
 
     /**
      * Get single instance
@@ -50,6 +55,12 @@ class ACF_REST_Endpoints {
         
         // GTM Tracking routes - /options/track
         $this->register_gtm_routes();
+
+        // WooCommerce Coupon routes - /woocommerce-ext/v1/coupons
+        $this->register_wc_coupon_routes();
+
+        // WooCommerce Tax routes - /woocommerce-ext/v1/taxes
+        $this->register_wc_tax_routes();
     }
 
     /**
@@ -95,6 +106,59 @@ class ACF_REST_Endpoints {
             'callback'            => [$gtm_tracking, 'rest_update_handler'],
             'permission_callback' => [$this, 'check_track_write_permission'],
             'args'                => $this->get_track_post_args(),
+        ]);
+    }
+    /**
+     * Register WooCommerce coupon routes
+     */
+    private function register_wc_coupon_routes() {
+        if (!class_exists('ACF_REST_WC_Coupon_Settings')) {
+            return;
+        }
+
+        $wc_coupon = ACF_REST_WC_Coupon_Settings::get_instance();
+
+        // GET /woocommerce-ext/v1/coupons - Get coupon status
+        register_rest_route(self::WC_NAMESPACE, '/coupons', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$wc_coupon, 'rest_get_handler'],
+            'permission_callback' => [$wc_coupon, 'check_read_permission'],
+            'args'                => $this->get_wc_coupon_get_args(),
+        ]);
+
+        // POST /woocommerce-ext/v1/coupons - Update coupon status
+        register_rest_route(self::WC_NAMESPACE, '/coupons', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$wc_coupon, 'rest_update_handler'],
+            'permission_callback' => [$wc_coupon, 'check_write_permission'],
+            'args'                => $this->get_wc_coupon_post_args(),
+        ]);
+    }
+
+    /**
+     * Register WooCommerce tax routes
+     */
+    private function register_wc_tax_routes() {
+        if (!class_exists('ACF_REST_WC_Tax_Settings')) {
+            return;
+        }
+
+        $wc_tax = ACF_REST_WC_Tax_Settings::get_instance();
+
+        // GET /woocommerce-ext/v1/taxes - Get tax status
+        register_rest_route(self::WC_NAMESPACE, '/taxes', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$wc_tax, 'rest_get_handler'],
+            'permission_callback' => [$wc_tax, 'check_read_permission'],
+            'args'                => $this->get_wc_tax_get_args(),
+        ]);
+
+        // POST /woocommerce-ext/v1/taxes - Update tax status
+        register_rest_route(self::WC_NAMESPACE, '/taxes', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$wc_tax, 'rest_update_handler'],
+            'permission_callback' => [$wc_tax, 'check_write_permission'],
+            'args'                => $this->get_wc_tax_post_args(),
         ]);
     }
 
@@ -143,15 +207,62 @@ class ACF_REST_Endpoints {
     }
 
     /**
+     * Get arguments for WC Coupon GET request
+     *
+     * @return array
+     */
+    private function get_wc_coupon_get_args() {
+        return [];
+    }
+
+    /**
+     * Get arguments for WC Coupon POST request
+     *
+     * @return array
+     */
+    private function get_wc_coupon_post_args() {
+        return [
+            'enabled' => [
+                'description'       => __('Enable or disable WooCommerce coupons', 'acf-rest-api'),
+                'type'              => 'boolean',
+                'required'          => true,
+                'sanitize_callback' => 'rest_sanitize_boolean',
+            ],
+        ];
+    }
+
+    /**
+     * Get arguments for WC Tax GET request
+     *
+     * @return array
+     */
+    private function get_wc_tax_get_args() {
+        return [];
+    }
+
+    /**
+     * Get arguments for WC Tax POST request
+     *
+     * @return array
+     */
+    private function get_wc_tax_post_args() {
+        return [
+            'enabled' => [
+                'description'       => __('Enable or disable WooCommerce tax rates and calculations', 'acf-rest-api'),
+                'type'              => 'boolean',
+                'required'          => true,
+                'sanitize_callback' => 'rest_sanitize_boolean',
+            ],
+        ];
+    }
+
+    /**
      * Check permission for updating track settings
      *
      * @param WP_REST_Request $request Request object
      * @return bool|WP_Error
      */
     public function check_track_write_permission($request) {
-        // For public API access, you might want to use API keys
-        // For now, we'll allow public access but log the request
-        
         // Option 1: Require authentication
         // if (!current_user_can('manage_options')) {
         //     return new WP_Error(
