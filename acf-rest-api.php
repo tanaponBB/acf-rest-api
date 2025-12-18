@@ -3,7 +3,7 @@
  * Plugin Name: ACF REST API Extended
  * Plugin URI: https://example.com/plugins/acf-rest-api
  * Description: Extends WordPress REST API with ACF Options and GTM Tracking endpoints. Provides GET/POST routes for managing ACF option fields and GTM tracking settings.
- * Version: 1.0.2
+ * Version: 1.0.1
  * Author: TanaponBB
  * Author URI: https://example.com
  * License: GPL v2 or later
@@ -19,7 +19,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin constants
-define('ACF_REST_API_VERSION', '1.0.0');
+define('ACF_REST_API_VERSION', '1.0.1');
 define('ACF_REST_API_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ACF_REST_API_PLUGIN_URL', plugin_dir_url(__FILE__));
 
