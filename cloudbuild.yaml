@@ -1,111 +1,36 @@
-# Cloud Build configuration for WordPress Plugin Auto-Update
-# 
-# Substitutions (set in trigger):
-#   _BUCKET: GCS bucket name
-#   _PLUGIN_SLUG: Plugin folder name
-
 steps:
-  # Step 1: Extract version and create ZIP
   - name: 'ubuntu'
-    id: 'build'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        set -e
         apt-get update && apt-get install -y zip jq
         
-        echo "=== Build Started ==="
-        echo "Plugin: ${_PLUGIN_SLUG}"
-        echo "Bucket: ${_BUCKET}"
+        VERSION=$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}.php | head -1)
+        echo "Building version: $VERSION"
         
-        # Extract version from plugin file
-        PLUGIN_VERSION=$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}.php | head -1 || echo "1.0.0")
-        echo "Version: $PLUGIN_VERSION"
-        
-        # Save version for other steps
-        echo "$PLUGIN_VERSION" > /workspace/version.txt
-        
-        # Create plugin folder structure
         mkdir -p build/${_PLUGIN_SLUG}
-        
-        # Copy files
         cp ${_PLUGIN_SLUG}.php build/${_PLUGIN_SLUG}/
         cp -r includes build/${_PLUGIN_SLUG}/ 2>/dev/null || true
-        cp -r assets build/${_PLUGIN_SLUG}/ 2>/dev/null || true
-        cp -r languages build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         cp readme.txt build/${_PLUGIN_SLUG}/ 2>/dev/null || true
-        cp README.md build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         
-        # Create ZIP
-        cd build
-        zip -r ${_PLUGIN_SLUG}.zip ${_PLUGIN_SLUG}
+        cd build && zip -r plugin.zip ${_PLUGIN_SLUG}
         
-        echo "=== ZIP Created ==="
-        ls -la *.zip
-        
-        # Generate plugin-info.json
-        cd ..
-        CURRENT_DATE=$(date -u +"%Y-%m-%d %H:%M:%S")
-        
-        if [ -f "plugin-info.json" ]; then
-          cp plugin-info.json build/plugin-info.json
-        else
-          echo '{"name":"Plugin","slug":"plugin","sections":{}}' > build/plugin-info.json
-        fi
-        
-        cd build
-        jq --arg v "$PLUGIN_VERSION" \
-           --arg url "https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip" \
-           --arg date "$CURRENT_DATE" \
-           '.version = $v | .download_url = $url | .last_updated = $date' \
-           plugin-info.json > plugin-info-new.json
-        mv plugin-info-new.json plugin-info.json
-        
-        echo "=== plugin-info.json ==="
-        cat plugin-info.json
+        cp ../plugin-info.json . 2>/dev/null || echo '{}' > plugin-info.json
+        jq --arg v "$VERSION" --arg url "https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip" '.version=$v|.download_url=$url' plugin-info.json > tmp.json && mv tmp.json plugin-info.json
 
-  # Step 2: Upload to GCS
   - name: 'gcr.io/cloud-builders/gsutil'
-    id: 'upload'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        set -e
-        PLUGIN_VERSION=$(cat /workspace/version.txt)
-        
-        echo "=== Uploading to GCS ==="
-        
-        # Upload ZIP (both versioned and latest)
-        gsutil cp build/${_PLUGIN_SLUG}.zip gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip
-        gsutil cp build/${_PLUGIN_SLUG}.zip gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${PLUGIN_VERSION}.zip
-        
-        # Upload plugin-info.json with no-cache
-        gsutil -h "Cache-Control:no-cache,max-age=0" cp build/plugin-info.json gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json
-        
-        echo "=== Upload Complete ==="
-        echo "ZIP: https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip"
-        echo "Info: https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json"
-
-  # Step 3: Set public access
-  - name: 'gcr.io/cloud-builders/gsutil'
-    id: 'permissions'
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        PLUGIN_VERSION=$(cat /workspace/version.txt)
+        gsutil cp build/plugin.zip gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip
+        gsutil -h "Cache-Control:no-cache" cp build/plugin-info.json gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json
         gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip || true
-        gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${PLUGIN_VERSION}.zip || true
         gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json || true
-        echo "=== Permissions Set ==="
 
 substitutions:
   _BUCKET: 'tanapon-wp-plugins'
   _PLUGIN_SLUG: 'acf-rest-api'
-
-options:
-  logging: CLOUD_LOGGING_ONLY
 
 timeout: '600s'
