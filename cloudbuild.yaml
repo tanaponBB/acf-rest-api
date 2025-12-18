@@ -1,11 +1,5 @@
 # Cloud Build configuration for ACF REST API Plugin
-# This file automates building and deploying the plugin to Google Cloud Storage
-#
-# Setup:
-# 1. Create a GCS bucket for plugin updates
-# 2. Enable Cloud Build API
-# 3. Connect your repository to Cloud Build
-# 4. Create a trigger that runs on push to main/master branch
+# Triggers on push to main/master branch
 #
 # Required substitutions (set in Cloud Build trigger):
 # - _BUCKET: Your GCS bucket name (e.g., my-wp-plugins)
@@ -19,8 +13,13 @@ steps:
     args:
       - '-c'
       - |
-        VERSION=$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.php)
-        echo "Detected version: $VERSION"
+        # Plugin file is in root, not in subfolder
+        VERSION=$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}.php)
+        if [ -z "$VERSION" ]; then
+          echo "❌ Could not extract version from ${_PLUGIN_SLUG}.php"
+          exit 1
+        fi
+        echo "✅ Detected version: $VERSION"
         echo "$VERSION" > /workspace/version.txt
 
   # Step 2: Create plugin ZIP file
@@ -34,24 +33,29 @@ steps:
         VERSION=$(cat /workspace/version.txt)
         echo "Creating ZIP for version $VERSION"
         
-        # Create zip with plugin folder structure
-        cd ${_PLUGIN_SLUG}
-        zip -r ../acf-rest-api-${VERSION}.zip . \
-          -x "*.git*" \
-          -x "*.github*" \
-          -x "cloudbuild.yaml" \
-          -x "plugin-info.json" \
-          -x "*.md" \
-          -x "tests/*" \
-          -x "node_modules/*" \
-          -x ".env*"
-        cd ..
+        # Create build directory
+        mkdir -p build/${_PLUGIN_SLUG}
         
-        # Also create a latest.zip for convenience
-        cp acf-rest-api-${VERSION}.zip acf-rest-api-latest.zip
+        # Copy all plugin files to build folder (with correct folder structure)
+        cp -r ${_PLUGIN_SLUG}.php build/${_PLUGIN_SLUG}/
+        cp -r includes build/${_PLUGIN_SLUG}/ 2>/dev/null || true
+        cp -r assets build/${_PLUGIN_SLUG}/ 2>/dev/null || true
+        cp -r languages build/${_PLUGIN_SLUG}/ 2>/dev/null || true
+        cp readme.txt build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         
-        echo "ZIP files created successfully"
+        # Create ZIP with plugin folder structure
+        cd build
+        zip -r ${_PLUGIN_SLUG}-${VERSION}.zip ${_PLUGIN_SLUG}
+        
+        # Also create latest.zip for convenience
+        cp ${_PLUGIN_SLUG}-${VERSION}.zip ${_PLUGIN_SLUG}-latest.zip
+        
+        echo "✅ ZIP files created successfully"
         ls -la *.zip
+        
+        # Show contents
+        echo "📦 ZIP contents:"
+        unzip -l ${_PLUGIN_SLUG}-${VERSION}.zip
 
   # Step 3: Generate plugin-info.json
   - name: 'gcr.io/cloud-builders/gcloud'
@@ -66,58 +70,124 @@ steps:
         SLUG=${_PLUGIN_SLUG}
         DATE=$(date -u +"%Y-%m-%d %H:%M:%S")
         
+        # Extract plugin info from main file
+        PLUGIN_FILE="${SLUG}.php"
+        PLUGIN_NAME=$(grep -oP "Plugin Name:\s*\K.+" $PLUGIN_FILE | head -1)
+        PLUGIN_URI=$(grep -oP "Plugin URI:\s*\K.+" $PLUGIN_FILE | head -1)
+        DESCRIPTION=$(grep -oP "Description:\s*\K.+" $PLUGIN_FILE | head -1)
+        AUTHOR=$(grep -oP "Author:\s*\K.+" $PLUGIN_FILE | head -1)
+        AUTHOR_URI=$(grep -oP "Author URI:\s*\K.+" $PLUGIN_FILE | head -1)
+        REQUIRES_WP=$(grep -oP "Requires at least:\s*\K.+" $PLUGIN_FILE | head -1)
+        REQUIRES_PHP=$(grep -oP "Requires PHP:\s*\K.+" $PLUGIN_FILE | head -1)
+        TESTED_WP=$(grep -oP "Tested up to:\s*\K.+" $PLUGIN_FILE | head -1)
+        
+        # Set defaults if not found
+        PLUGIN_NAME=${PLUGIN_NAME:-"ACF REST API Extended"}
+        REQUIRES_WP=${REQUIRES_WP:-"5.8"}
+        REQUIRES_PHP=${REQUIRES_PHP:-"7.4"}
+        TESTED_WP=${TESTED_WP:-"6.4"}
+        
+        echo "Plugin Name: $PLUGIN_NAME"
+        echo "Version: $VERSION"
+        
         # Read existing plugin-info.json or create new one
-        if [ -f "${SLUG}/plugin-info.json" ]; then
-          cp ${SLUG}/plugin-info.json plugin-info.json
+        if [ -f "plugin-info.json" ]; then
+          cp plugin-info.json build/plugin-info.json
         else
-          echo '{}' > plugin-info.json
+          echo '{}' > build/plugin-info.json
         fi
         
         # Update the JSON with new version info
+        cd build
         jq --arg v "$VERSION" \
-           --arg url "https://storage.googleapis.com/${BUCKET}/${SLUG}/acf-rest-api-${VERSION}.zip" \
+           --arg url "https://storage.googleapis.com/${BUCKET}/${SLUG}/${SLUG}-${VERSION}.zip" \
            --arg date "$DATE" \
-           '.version = $v | .download_url = $url | .last_updated = $date' \
+           --arg name "$PLUGIN_NAME" \
+           --arg tested "$TESTED_WP" \
+           --arg requires "$REQUIRES_WP" \
+           --arg requires_php "$REQUIRES_PHP" \
+           '.version = $v | .download_url = $url | .last_updated = $date | .name = $name | .tested = $tested | .requires = $requires | .requires_php = $requires_php' \
            plugin-info.json > plugin-info-updated.json
         
         mv plugin-info-updated.json plugin-info.json
         
-        echo "Generated plugin-info.json:"
+        echo "✅ Generated plugin-info.json:"
         cat plugin-info.json
 
   # Step 4: Upload ZIP files to GCS
   - name: 'gcr.io/cloud-builders/gsutil'
     id: 'upload-zip'
+    entrypoint: 'bash'
     args:
-      - 'cp'
-      - 'acf-rest-api-*.zip'
-      - 'gs://${_BUCKET}/${_PLUGIN_SLUG}/'
+      - '-c'
+      - |
+        VERSION=$(cat /workspace/version.txt)
+        
+        # Upload versioned ZIP
+        gsutil cp build/${_PLUGIN_SLUG}-${VERSION}.zip \
+          gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${VERSION}.zip
+        
+        # Upload latest ZIP
+        gsutil cp build/${_PLUGIN_SLUG}-latest.zip \
+          gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-latest.zip
+        
+        echo "✅ Uploaded ZIP files"
 
   # Step 5: Upload plugin-info.json to GCS
   - name: 'gcr.io/cloud-builders/gsutil'
     id: 'upload-info'
+    entrypoint: 'bash'
     args:
-      - 'cp'
-      - 'plugin-info.json'
-      - 'gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json'
+      - '-c'
+      - |
+        # Upload with no-cache header for immediate updates
+        gsutil -h "Cache-Control:no-cache, max-age=0" \
+          cp build/plugin-info.json \
+          gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json
+        
+        echo "✅ Uploaded plugin-info.json"
 
-  # Step 6: Set cache headers for plugin-info.json (short cache for update checks)
-  - name: 'gcr.io/cloud-builders/gsutil'
-    id: 'set-cache-headers'
-    args:
-      - 'setmeta'
-      - '-h'
-      - 'Cache-Control:public, max-age=3600'
-      - 'gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json'
-
-  # Step 7: Make files publicly readable
+  # Step 6: Set public access on files
   - name: 'gcr.io/cloud-builders/gsutil'
     id: 'set-permissions'
+    entrypoint: 'bash'
     args:
-      - 'iam'
-      - 'ch'
-      - 'allUsers:objectViewer'
-      - 'gs://${_BUCKET}'
+      - '-c'
+      - |
+        VERSION=$(cat /workspace/version.txt)
+        
+        # Make files publicly readable
+        gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${VERSION}.zip
+        gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-latest.zip
+        gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json
+        
+        echo "✅ Set public access"
+
+  # Step 7: Deployment Summary
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'summary'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        VERSION=$(cat /workspace/version.txt)
+        
+        echo ""
+        echo "========================================"
+        echo "🎉 Deployment Complete!"
+        echo "========================================"
+        echo ""
+        echo "Plugin: ${_PLUGIN_SLUG}"
+        echo "Version: ${VERSION}"
+        echo ""
+        echo "📁 Files deployed:"
+        echo "  • ZIP: https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-${VERSION}.zip"
+        echo "  • Latest: https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}-latest.zip"
+        echo "  • Info: https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json"
+        echo ""
+        echo "⏰ WordPress sites will detect this update within 12 hours"
+        echo "   (or immediately via 'Check for updates' link)"
+        echo "========================================"
 
 # Substitution defaults
 substitutions:
@@ -128,5 +198,5 @@ substitutions:
 options:
   logging: CLOUD_LOGGING_ONLY
 
-# Timeout (5 minutes should be plenty)
+# Timeout
 timeout: '300s'
