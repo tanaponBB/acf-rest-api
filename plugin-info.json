@@ -10,7 +10,7 @@
     "requires_php": "7.4",
     "downloaded": 0,
     "last_updated": "2025-01-01 00:00:00",
-    "download_url": "https://storage.googleapis.com/YOUR_BUCKET_NAME/acf-rest-api/acf-rest-api-1.0.0.zip",
+    "download_url": "https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/acf-rest-api-1.0.0.zip",
     "sections": {
         "description": "<p>Extends WordPress REST API with ACF Options and GTM Tracking endpoints.</p><h4>Features</h4><ul><li><strong>ACF Options API</strong> - GET and POST endpoints for all ACF option fields</li><li><strong>GTM Tracking</strong> - Dedicated endpoints and admin page for Google Tag Manager</li><li><strong>WooCommerce Settings</strong> - Coupon and Tax enable/disable via REST API</li><li><strong>Auto-Updates</strong> - Automatic updates from Google Cloud Storage</li></ul>",
         "installation": "<ol><li>Upload the plugin files to <code>/wp-content/plugins/acf-rest-api</code></li><li>Activate the plugin through the 'Plugins' screen</li><li>Ensure ACF is installed and activated</li><li>Configure GTM tracking in the 'GTM Tracking' admin menu</li></ol>",
@@ -18,12 +18,12 @@
         "faq": "<h4>Does this require ACF Pro?</h4><p>No, works with both ACF Free and Pro.</p><h4>How do I secure the API endpoints?</h4><p>Read operations are public by default. Write operations require authentication. Modify permission callbacks in class-rest-endpoints.php as needed.</p>"
     },
     "banners": {
-        "low": "https://storage.googleapis.com/YOUR_BUCKET_NAME/acf-rest-api/assets/banner-772x250.png",
-        "high": "https://storage.googleapis.com/YOUR_BUCKET_NAME/acf-rest-api/assets/banner-1544x500.png"
+        "low": "https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/assets/banner-772x250.png",
+        "high": "https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/assets/banner-1544x500.png"
     },
     "icons": {
-        "1x": "https://storage.googleapis.com/YOUR_BUCKET_NAME/acf-rest-api/assets/icon-128x128.png",
-        "2x": "https://storage.googleapis.com/YOUR_BUCKET_NAME/acf-rest-api/assets/icon-256x256.png"
+        "1x": "https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/assets/icon-128x128.png",
+        "2x": "https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/assets/icon-256x256.png"
     },
     "upgrade_notice": "Version 1.0.0 - Initial release with full REST API support for ACF options and GTM tracking."
 }

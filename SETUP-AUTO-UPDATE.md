@@ -72,7 +72,7 @@ gcloud services enable cloudbuild.googleapis.com
    - **Configuration**: Cloud Build configuration file
    - **Location**: `/cloudbuild.yaml`
 3. Add **Substitution Variables**:
-   - `_BUCKET`: `your-wp-plugins`
+   - `_BUCKET`: `tanapon-wp-plugins`
    - `_PLUGIN_SLUG`: `acf-rest-api`
 4. Click **Create**
 
