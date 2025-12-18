@@ -4,36 +4,39 @@ steps:
     args:
       - '-c'
       - |
+        # ติดตั้งเครื่องมือที่จำเป็น
         apt-get update && apt-get install -y zip jq
         
-        # ดึงเวอร์ชันจากไฟล์หลักของ WordPress Plugin
+        # ดึง Version จากไฟล์ PHP (ใช้ $VERSION เพราะเป็น Bash Variable)
         VERSION=$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}.php | head -1)
         echo "Building version: $VERSION"
         
-        # เตรียมโครงสร้างโฟลเดอร์สำหรับ Build
+        # สร้างโฟลเดอร์สำหรับ Pack ไฟล์
         mkdir -p build/${_PLUGIN_SLUG}
         cp ${_PLUGIN_SLUG}.php build/${_PLUGIN_SLUG}/
         cp -r includes build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         cp readme.txt build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         
-        # บีบอัดไฟล์เป็น .zip
+        # บีบอัดไฟล์
         cd build && zip -r plugin.zip ${_PLUGIN_SLUG}
         
-        # อัปเดตไฟล์ JSON สำหรับตัว Update Checker
+        # อัปเดตไฟล์ plugin-info.json สำหรับ WordPress Update Checker
+        # ใช้ $VERSION สำหรับ Bash และ ${_BUCKET} สำหรับ Cloud Build substitution
         cp ../plugin-info.json . 2>/dev/null || echo '{}' > plugin-info.json
-        jq --arg v "$VERSION" --arg url "https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip" \
-          '.version=$v|.download_url=$url' plugin-info.json > tmp.json && mv tmp.json plugin-info.json
+        jq --arg v "$VERSION" \
+           --arg url "https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip" \
+           '.version=$v|.download_url=$url' plugin-info.json > tmp.json && mv tmp.json plugin-info.json
 
   - name: 'gcr.io/cloud-builders/gsutil'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        # อัปโหลดไฟล์ไปยัง Google Cloud Storage
+        # อัปโหลดไฟล์ไปยัง GCS
         gsutil cp build/plugin.zip gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip
         gsutil -h "Cache-Control:no-cache" cp build/plugin-info.json gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json
         
-        # ตั้งค่า Public Access (Optional)
+        # ตั้งค่าให้คนทั่วไปดาวน์โหลดได้ (Public)
         gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip || true
         gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json || true
 
@@ -41,10 +44,8 @@ substitutions:
   _BUCKET: 'tanapon-wp-plugins'
   _PLUGIN_SLUG: 'acf-rest-api'
 
-# ส่วนที่เพิ่มเข้ามาเพื่อแก้ปัญหา Error ของคุณ
 options:
+  # แก้ปัญหา 'build.service_account' error
   logging: CLOUD_LOGGING_ONLY
-  # หากคุณระบุ Service Account ใน trigger ให้ใส่บรรทัดล่างนี้ด้วย (ถ้าไม่ได้ระบุใน trigger ก็ลบออกได้)
-  # serviceAccount: 'projects/$PROJECT_ID/serviceAccounts/YOUR_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com'
 
 timeout: '600s'
