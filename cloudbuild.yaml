@@ -191,7 +191,7 @@ steps:
 
 # Substitution defaults
 substitutions:
-  _BUCKET: 'your-plugin-bucket'
+  _BUCKET: 'tanapon-wp-plugins'
   _PLUGIN_SLUG: 'acf-rest-api'
 
 # Build options
