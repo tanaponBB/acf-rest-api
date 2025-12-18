@@ -23,7 +23,7 @@ NC='\033[0m' # No Color
 if [ -z "$1" ]; then
     echo -e "${RED}❌ Error: Please provide bucket name${NC}"
     echo ""
-    echo "Usage: ./setup-gcs.sh YOUR_BUCKET_NAME [REGION]"
+    echo "Usage: ./setup-gcs.sh tanapon-wp-plugins [REGION]"
     echo ""
     echo "Example:"
     echo "  ./setup-gcs.sh my-wp-plugins"
