@@ -67,12 +67,10 @@ class ACF_REST_Plugin_Updater {
     private function __construct() {
         $this->plugin_slug = 'acf-rest-api';
         $this->plugin_basename = 'acf-rest-api/acf-rest-api.php';
-        
-        // Get version directly from the plugin file header, not from constant
-        // This ensures we always have the actual installed version
-        $this->current_version = $this->get_installed_version();
+        $this->current_version = ACF_REST_API_VERSION;
         
         // Set your GCS bucket URL here
+        // Format: https://storage.googleapis.com/YOUR_BUCKET_NAME/plugin-info.json
         $this->update_url = defined('ACF_REST_API_UPDATE_URL') 
             ? ACF_REST_API_UPDATE_URL 
             : '';
@@ -80,34 +78,6 @@ class ACF_REST_Plugin_Updater {
         if (!empty($this->update_url)) {
             $this->init_hooks();
         }
-    }
-
-    /**
-     * Get the actual installed plugin version from file header
-     * 
-     * @return string
-     */
-    private function get_installed_version() {
-        // First try the constant
-        if (defined('ACF_REST_API_VERSION')) {
-            return ACF_REST_API_VERSION;
-        }
-        
-        // Fallback: read from plugin file header
-        if (!function_exists('get_plugin_data')) {
-            require_once ABSPATH . 'wp-admin/includes/plugin.php';
-        }
-        
-        $plugin_file = WP_PLUGIN_DIR . '/' . $this->plugin_basename;
-        
-        if (file_exists($plugin_file)) {
-            $plugin_data = get_plugin_data($plugin_file, false, false);
-            if (!empty($plugin_data['Version'])) {
-                return $plugin_data['Version'];
-            }
-        }
-        
-        return '0.0.0';
     }
 
     /**
@@ -122,9 +92,6 @@ class ACF_REST_Plugin_Updater {
         
         // After update, clear cache
         add_action('upgrader_process_complete', [$this, 'clear_update_cache'], 10, 2);
-        
-        // Fix source directory name during auto-update
-        add_filter('upgrader_source_selection', [$this, 'fix_source_dir'], 10, 4);
         
         // Add "Check for updates" link in plugins page
         add_filter('plugin_action_links_' . $this->plugin_basename, [$this, 'add_action_links']);
@@ -144,53 +111,34 @@ class ACF_REST_Plugin_Updater {
             return $transient;
         }
 
-        // Always get fresh version from file
-        $current_version = $this->get_installed_version();
         $remote_info = $this->get_remote_info();
 
-        if (!$remote_info || !isset($remote_info->version)) {
-            return $transient;
-        }
+        if ($remote_info && isset($remote_info->version)) {
+            if (version_compare($this->current_version, $remote_info->version, '<')) {
+                $plugin_data = new stdClass();
+                $plugin_data->slug = $this->plugin_slug;
+                $plugin_data->plugin = $this->plugin_basename;
+                $plugin_data->new_version = $remote_info->version;
+                $plugin_data->url = $remote_info->homepage ?? '';
+                $plugin_data->package = $remote_info->download_url ?? '';
+                $plugin_data->icons = $remote_info->icons ?? [];
+                $plugin_data->banners = $remote_info->banners ?? [];
+                $plugin_data->tested = $remote_info->tested ?? '';
+                $plugin_data->requires_php = $remote_info->requires_php ?? '7.4';
+                $plugin_data->compatibility = new stdClass();
 
-        $remote_version = $remote_info->version;
-        
-        // Normalize versions for comparison (remove any whitespace)
-        $current_version = trim($current_version);
-        $remote_version = trim($remote_version);
+                $transient->response[$this->plugin_basename] = $plugin_data;
+            } else {
+                // No update available - add to no_update list
+                $plugin_data = new stdClass();
+                $plugin_data->slug = $this->plugin_slug;
+                $plugin_data->plugin = $this->plugin_basename;
+                $plugin_data->new_version = $this->current_version;
+                $plugin_data->url = '';
+                $plugin_data->package = '';
 
-        // Compare versions - only show update if remote is GREATER than current
-        $needs_update = version_compare($current_version, $remote_version, '<');
-
-        if ($needs_update) {
-            $plugin_data = new stdClass();
-            $plugin_data->slug = $this->plugin_slug;
-            $plugin_data->plugin = $this->plugin_basename;
-            $plugin_data->new_version = $remote_version;
-            $plugin_data->url = $remote_info->homepage ?? '';
-            $plugin_data->package = $remote_info->download_url ?? '';
-            $plugin_data->icons = (array) ($remote_info->icons ?? []);
-            $plugin_data->banners = (array) ($remote_info->banners ?? []);
-            $plugin_data->tested = $remote_info->tested ?? '';
-            $plugin_data->requires_php = $remote_info->requires_php ?? '7.4';
-            $plugin_data->compatibility = new stdClass();
-
-            $transient->response[$this->plugin_basename] = $plugin_data;
-            
-            // Make sure it's not in no_update
-            unset($transient->no_update[$this->plugin_basename]);
-        } else {
-            // No update available - add to no_update list
-            $plugin_data = new stdClass();
-            $plugin_data->slug = $this->plugin_slug;
-            $plugin_data->plugin = $this->plugin_basename;
-            $plugin_data->new_version = $current_version;
-            $plugin_data->url = '';
-            $plugin_data->package = '';
-
-            $transient->no_update[$this->plugin_basename] = $plugin_data;
-            
-            // Make sure it's not in response
-            unset($transient->response[$this->plugin_basename]);
+                $transient->no_update[$this->plugin_basename] = $plugin_data;
+            }
         }
 
         return $transient;
@@ -233,7 +181,7 @@ class ACF_REST_Plugin_Updater {
         $plugin_info->last_updated = $remote_info->last_updated ?? '';
         $plugin_info->download_link = $remote_info->download_url ?? '';
         
-        // Sections
+        // Sections (description, installation, changelog, etc.)
         $plugin_info->sections = [];
         if (isset($remote_info->sections)) {
             foreach ($remote_info->sections as $key => $value) {
@@ -273,14 +221,11 @@ class ACF_REST_Plugin_Updater {
             }
         }
 
-        // Fetch from remote with cache-busting
-        $url = add_query_arg('nocache', time(), $this->update_url);
-        
-        $response = wp_remote_get($url, [
+        // Fetch from remote
+        $response = wp_remote_get($this->update_url, [
             'timeout' => 15,
             'headers' => [
                 'Accept' => 'application/json',
-                'Cache-Control' => 'no-cache',
             ],
         ]);
 
@@ -307,74 +252,15 @@ class ACF_REST_Plugin_Updater {
     }
 
     /**
-     * Clear update cache after plugin update
+     * Clear update cache
      *
      * @param WP_Upgrader $upgrader
      * @param array $options
      */
     public function clear_update_cache($upgrader, $options) {
         if ($options['action'] === 'update' && $options['type'] === 'plugin') {
-            // Clear our custom cache
             delete_transient($this->cache_key);
-            
-            // If our plugin was updated, also clear WordPress update cache
-            if (isset($options['plugins']) && is_array($options['plugins'])) {
-                if (in_array($this->plugin_basename, $options['plugins'], true)) {
-                    // Force refresh of plugin update transient
-                    delete_site_transient('update_plugins');
-                }
-            }
         }
-    }
-
-    /**
-     * Fix the source directory name during update
-     * 
-     * @param string $source        Path to upgrade/update source
-     * @param string $remote_source Remote source URL  
-     * @param WP_Upgrader $upgrader WP_Upgrader instance
-     * @param array $hook_extra     Extra arguments
-     * @return string|WP_Error
-     */
-    public function fix_source_dir($source, $remote_source, $upgrader, $hook_extra) {
-        global $wp_filesystem;
-        
-        // Check if this is our plugin being updated
-        if (!isset($hook_extra['plugin']) || $hook_extra['plugin'] !== $this->plugin_basename) {
-            return $source;
-        }
-        
-        // Get the expected directory name
-        $expected_dir = dirname($this->plugin_basename);
-        $corrected_source = trailingslashit($remote_source) . trailingslashit($expected_dir);
-        
-        // If source already has correct name, return it
-        if (trailingslashit($source) === $corrected_source) {
-            return $source;
-        }
-        
-        // Check if the source directory exists
-        if (!$wp_filesystem->exists($source)) {
-            return new WP_Error(
-                'source_not_exists',
-                __('Update source directory does not exist.', 'acf-rest-api')
-            );
-        }
-        
-        // Remove destination if exists
-        if ($wp_filesystem->exists($corrected_source)) {
-            $wp_filesystem->delete($corrected_source, true);
-        }
-        
-        // Rename/move the source directory
-        if ($wp_filesystem->move($source, $corrected_source, true)) {
-            return $corrected_source;
-        }
-        
-        return new WP_Error(
-            'rename_failed',
-            __('Unable to rename update source directory.', 'acf-rest-api')
-        );
     }
 
     /**
@@ -414,12 +300,11 @@ class ACF_REST_Plugin_Updater {
             return;
         }
 
-        // Clear ALL caches
+        // Clear cache and force refresh
         delete_transient($this->cache_key);
         delete_site_transient('update_plugins');
-        
-        // Force WordPress to check for updates
-        wp_clean_plugins_cache(true);
+
+        // Trigger update check
         wp_update_plugins();
 
         // Redirect back with message
