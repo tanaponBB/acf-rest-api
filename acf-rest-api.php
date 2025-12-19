@@ -89,7 +89,7 @@ class ACF_REST_API_Plugin {
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-rest-endpoints.php';
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-plugin-updater.php';
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-coupon-setting.php';
-        // require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-tax-setting.php';
+        require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-tax-setting.php';
     }
 
     /**
