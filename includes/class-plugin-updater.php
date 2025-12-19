@@ -93,6 +93,9 @@ class ACF_REST_Plugin_Updater {
         // After update, clear cache
         add_action('upgrader_process_complete', [$this, 'clear_update_cache'], 10, 2);
         
+        // Fix source directory name during auto-update
+        add_filter('upgrader_source_selection', [$this, 'fix_source_dir'], 10, 4);
+        
         // Add "Check for updates" link in plugins page
         add_filter('plugin_action_links_' . $this->plugin_basename, [$this, 'add_action_links']);
         
@@ -261,6 +264,67 @@ class ACF_REST_Plugin_Updater {
         if ($options['action'] === 'update' && $options['type'] === 'plugin') {
             delete_transient($this->cache_key);
         }
+    }
+
+    /**
+     * Fix the source directory name during update
+     * 
+     * This is CRITICAL for auto-updates to work correctly.
+     * WordPress expects the extracted folder name to match the plugin directory name.
+     * 
+     * @param string $source        Path to upgrade/update source
+     * @param string $remote_source Remote source URL  
+     * @param WP_Upgrader $upgrader WP_Upgrader instance
+     * @param array $hook_extra     Extra arguments
+     * @return string|WP_Error
+     */
+    public function fix_source_dir($source, $remote_source, $upgrader, $hook_extra) {
+        global $wp_filesystem;
+        
+        // Check if this is our plugin being updated
+        if (!isset($hook_extra['plugin']) || $hook_extra['plugin'] !== $this->plugin_basename) {
+            return $source;
+        }
+        
+        // Get the expected directory name (just the folder name, e.g., 'acf-rest-api')
+        $expected_dir = dirname($this->plugin_basename);
+        
+        // Build the corrected source path
+        $corrected_source = trailingslashit($remote_source) . trailingslashit($expected_dir);
+        
+        // If source already has correct name, return it
+        if (trailingslashit($source) === $corrected_source) {
+            return $source;
+        }
+        
+        // Check if the source directory exists
+        if (!$wp_filesystem->exists($source)) {
+            return new WP_Error(
+                'source_not_exists',
+                __('Update source directory does not exist.', 'acf-rest-api'),
+                ['source' => $source]
+            );
+        }
+        
+        // Check if corrected destination already exists, remove it if so
+        if ($wp_filesystem->exists($corrected_source)) {
+            $wp_filesystem->delete($corrected_source, true);
+        }
+        
+        // Rename/move the source directory to the correct name
+        if ($wp_filesystem->move($source, $corrected_source, true)) {
+            return $corrected_source;
+        }
+        
+        // If move fails, return error
+        return new WP_Error(
+            'rename_failed',
+            __('Unable to rename update source directory.', 'acf-rest-api'),
+            [
+                'source' => $source, 
+                'destination' => $corrected_source
+            ]
+        );
     }
 
     /**
