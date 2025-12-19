@@ -2,15 +2,8 @@
 /**
  * WooCommerce Tax Options Settings Handler
  *
- * Handles WooCommerce tax options configuration
- * via REST API endpoints.
- *
- * Options managed:
- * - woocommerce_prices_include_tax (yes/no)
- * - woocommerce_tax_based_on (shipping/billing/base)
- * - woocommerce_shipping_tax_class (inherit/standard/reduced-rate/zero-rate)
- * - woocommerce_tax_round_at_subtotal (yes/no)
- * - woocommerce_tax_classes (text area with tax classes)
+ * Dynamically handles WooCommerce tax options configuration
+ * via REST API endpoints by fetching live data from WooCommerce.
  *
  * @package ACF_REST_API
  * @since 1.2.1
@@ -35,12 +28,9 @@ class ACF_REST_WC_Tax_Options_Settings {
     const OPTION_SHIPPING_TAX_CLASS = 'woocommerce_shipping_tax_class';
     const OPTION_TAX_ROUND_AT_SUBTOTAL = 'woocommerce_tax_round_at_subtotal';
     const OPTION_TAX_CLASSES = 'woocommerce_tax_classes';
-
-    /**
-     * Valid values for select options
-     */
-    private $valid_tax_based_on = ['shipping', 'billing', 'base'];
-    private $valid_shipping_tax_class = ['inherit', '', 'standard', 'reduced-rate', 'zero-rate'];
+    const OPTION_TAX_DISPLAY_SHOP = 'woocommerce_tax_display_shop';
+    const OPTION_TAX_DISPLAY_CART = 'woocommerce_tax_display_cart';
+    const OPTION_TAX_TOTAL_DISPLAY = 'woocommerce_tax_total_display';
 
     /**
      * Get single instance
@@ -69,7 +59,104 @@ class ACF_REST_WC_Tax_Options_Settings {
     }
 
     /**
-     * Get all tax options
+     * Get all available tax classes from WooCommerce
+     *
+     * @return array
+     */
+    private function get_wc_tax_classes() {
+        if (!$this->is_woocommerce_active()) {
+            return [];
+        }
+
+        // Get tax classes using WooCommerce helper function
+        $tax_classes = WC_Tax::get_tax_classes();
+        
+        $classes = [
+            '' => __('Standard', 'woocommerce')
+        ];
+        
+        if (!empty($tax_classes)) {
+            foreach ($tax_classes as $class) {
+                $classes[sanitize_title($class)] = $class;
+            }
+        }
+        
+        return $classes;
+    }
+
+    /**
+     * Get valid values for tax_based_on from WooCommerce
+     *
+     * @return array
+     */
+    private function get_tax_based_on_options() {
+        return [
+            'shipping' => __('Customer shipping address', 'woocommerce'),
+            'billing'  => __('Customer billing address', 'woocommerce'),
+            'base'     => __('Shop base address', 'woocommerce'),
+        ];
+    }
+
+    /**
+     * Get shipping tax class choices dynamically from WooCommerce
+     *
+     * @return array
+     */
+    private function get_shipping_tax_class_choices() {
+        $choices = [
+            '' => __('Shipping tax class based on cart items', 'woocommerce'),
+        ];
+
+        // Get all tax classes from WooCommerce
+        $tax_classes = $this->get_wc_tax_classes();
+        
+        foreach ($tax_classes as $slug => $label) {
+            $choices[$slug] = $label;
+        }
+
+        return $choices;
+    }
+
+    /**
+     * Get display options from WooCommerce
+     *
+     * @return array
+     */
+    private function get_tax_display_options() {
+        return [
+            'incl' => __('Including tax', 'woocommerce'),
+            'excl' => __('Excluding tax', 'woocommerce'),
+        ];
+    }
+
+    /**
+     * Get tax total display options
+     *
+     * @return array
+     */
+    private function get_tax_total_display_options() {
+        return [
+            'single'   => __('As a single total', 'woocommerce'),
+            'itemized' => __('Itemized', 'woocommerce'),
+        ];
+    }
+
+    /**
+     * Parse tax classes from WooCommerce
+     *
+     * @return array
+     */
+    private function parse_tax_classes() {
+        if (!$this->is_woocommerce_active()) {
+            return [];
+        }
+
+        $tax_classes = WC_Tax::get_tax_classes();
+        return !empty($tax_classes) ? $tax_classes : [];
+    }
+
+    /**
+     * Get all tax options dynamically
      *
      * @return array
      */
@@ -81,85 +168,86 @@ class ACF_REST_WC_Tax_Options_Settings {
             ];
         }
 
+        // Get current values from WooCommerce
+        $prices_include_tax = get_option(self::OPTION_PRICES_INCLUDE_TAX, 'no');
+        $tax_based_on = get_option(self::OPTION_TAX_BASED_ON, 'shipping');
+        $shipping_tax_class = get_option(self::OPTION_SHIPPING_TAX_CLASS, '');
+        $tax_round_at_subtotal = get_option(self::OPTION_TAX_ROUND_AT_SUBTOTAL, 'no');
+        $tax_display_shop = get_option(self::OPTION_TAX_DISPLAY_SHOP, 'excl');
+        $tax_display_cart = get_option(self::OPTION_TAX_DISPLAY_CART, 'excl');
+        $tax_total_display = get_option(self::OPTION_TAX_TOTAL_DISPLAY, 'itemized');
+
         return [
             'success' => true,
             'options' => [
                 'prices_include_tax' => [
-                    'value'       => get_option(self::OPTION_PRICES_INCLUDE_TAX, 'no'),
-                    'enabled'     => get_option(self::OPTION_PRICES_INCLUDE_TAX, 'no') === 'yes',
+                    'value'       => $prices_include_tax,
+                    'enabled'     => $prices_include_tax === 'yes',
                     'option_name' => self::OPTION_PRICES_INCLUDE_TAX,
-                    'description' => __('Prices entered with tax', 'acf-rest-api'),
+                    'description' => __('Prices entered with tax', 'woocommerce'),
                     'choices'     => [
-                        'yes' => __('Yes, I will enter prices inclusive of tax', 'acf-rest-api'),
-                        'no'  => __('No, I will enter prices exclusive of tax', 'acf-rest-api'),
+                        'yes' => __('Yes, I will enter prices inclusive of tax', 'woocommerce'),
+                        'no'  => __('No, I will enter prices exclusive of tax', 'woocommerce'),
                     ],
                 ],
                 'tax_based_on' => [
-                    'value'       => get_option(self::OPTION_TAX_BASED_ON, 'shipping'),
+                    'value'       => $tax_based_on,
                     'option_name' => self::OPTION_TAX_BASED_ON,
-                    'description' => __('Calculate tax based on', 'acf-rest-api'),
-                    'choices'     => [
-                        'shipping' => __('Customer shipping address', 'acf-rest-api'),
-                        'billing'  => __('Customer billing address', 'acf-rest-api'),
-                        'base'     => __('Shop base address', 'acf-rest-api'),
-                    ],
+                    'description' => __('Calculate tax based on', 'woocommerce'),
+                    'choices'     => $this->get_tax_based_on_options(),
                 ],
                 'shipping_tax_class' => [
-                    'value'       => get_option(self::OPTION_SHIPPING_TAX_CLASS, 'inherit'),
+                    'value'       => $shipping_tax_class,
                     'option_name' => self::OPTION_SHIPPING_TAX_CLASS,
-                    'description' => __('Shipping tax class', 'acf-rest-api'),
+                    'description' => __('Shipping tax class', 'woocommerce'),
                     'choices'     => $this->get_shipping_tax_class_choices(),
                 ],
                 'tax_round_at_subtotal' => [
-                    'value'       => get_option(self::OPTION_TAX_ROUND_AT_SUBTOTAL, 'no'),
-                    'enabled'     => get_option(self::OPTION_TAX_ROUND_AT_SUBTOTAL, 'no') === 'yes',
+                    'value'       => $tax_round_at_subtotal,
+                    'enabled'     => $tax_round_at_subtotal === 'yes',
                     'option_name' => self::OPTION_TAX_ROUND_AT_SUBTOTAL,
-                    'description' => __('Rounding', 'acf-rest-api'),
+                    'description' => __('Round tax at subtotal level, instead of rounding per line', 'woocommerce'),
+                    'choices'     => [
+                        'yes' => __('Yes', 'woocommerce'),
+                        'no'  => __('No', 'woocommerce'),
+                    ],
+                ],
+                'tax_display_shop' => [
+                    'value'       => $tax_display_shop,
+                    'option_name' => self::OPTION_TAX_DISPLAY_SHOP,
+                    'description' => __('Display prices in the shop', 'woocommerce'),
+                    'choices'     => $this->get_tax_display_options(),
+                ],
+                'tax_display_cart' => [
+                    'value'       => $tax_display_cart,
+                    'option_name' => self::OPTION_TAX_DISPLAY_CART,
+                    'description' => __('Display prices during cart and checkout', 'woocommerce'),
+                    'choices'     => $this->get_tax_display_options(),
+                ],
+                'tax_total_display' => [
+                    'value'       => $tax_total_display,
+                    'option_name' => self::OPTION_TAX_TOTAL_DISPLAY,
+                    'description' => __('Display tax totals', 'woocommerce'),
+                    'choices'     => $this->get_tax_total_display_options(),
                 ],
                 'tax_classes' => [
-                    'value'       => get_option(self::OPTION_TAX_CLASSES, "Reduced rate\nZero rate"),
+                    'value'       => $this->parse_tax_classes(),
                     'option_name' => self::OPTION_TAX_CLASSES,
-                    'description' => __('Additional tax classes', 'acf-rest-api'),
-                    'parsed'      => $this->parse_tax_classes(get_option(self::OPTION_TAX_CLASSES, "Reduced rate\nZero rate")),
+                    'description' => __('Additional tax classes', 'woocommerce'),
+                    'available_classes' => $this->get_wc_tax_classes(),
+                ],
+            ],
+            'meta' => [
+                'wc_version' => defined('WC_VERSION') ? WC_VERSION : null,
+                'tax_enabled' => wc_tax_enabled(),
+                'store_address' => [
+                    'country'  => WC()->countries->get_base_country(),
+                    'state'    => WC()->countries->get_base_state(),
+                    'postcode' => WC()->countries->get_base_postcode(),
+                    'city'     => WC()->countries->get_base_city(),
                 ],
             ],
         ];
-    }
-
-    /**
-     * Get shipping tax class choices including custom tax classes
-     *
-     * @return array
-     */
-    private function get_shipping_tax_class_choices() {
-        $choices = [
-            'inherit'  => __('Shipping tax class based on cart items', 'acf-rest-api'),
-            'standard' => __('Standard', 'acf-rest-api'),
-        ];
-
-        // Add custom tax classes
-        $tax_classes = $this->parse_tax_classes(get_option(self::OPTION_TAX_CLASSES, ''));
-        foreach ($tax_classes as $class) {
-            $slug = sanitize_title($class);
-            $choices[$slug] = $class;
-        }
-
-        return $choices;
-    }
-
-    /**
-     * Parse tax classes from textarea value
-     *
-     * @param string $value Tax classes string (newline separated)
-     * @return array
-     */
-    private function parse_tax_classes($value) {
-        if (empty($value)) {
-            return [];
-        }
-
-        $classes = array_filter(array_map('trim', explode("\n", $value)));
-        return array_values($classes);
     }
 
     /**
@@ -190,14 +278,16 @@ class ACF_REST_WC_Tax_Options_Settings {
         // Update tax_based_on
         if (isset($data['tax_based_on'])) {
             $value = sanitize_text_field($data['tax_based_on']);
-            if (in_array($value, $this->valid_tax_based_on, true)) {
+            $valid_options = array_keys($this->get_tax_based_on_options());
+            
+            if (in_array($value, $valid_options, true)) {
                 if (update_option(self::OPTION_TAX_BASED_ON, $value)) {
                     $updated['tax_based_on'] = $value;
                 }
             } else {
                 $errors['tax_based_on'] = sprintf(
                     __('Invalid value. Must be one of: %s', 'acf-rest-api'),
-                    implode(', ', $this->valid_tax_based_on)
+                    implode(', ', $valid_options)
                 );
             }
         }
@@ -206,6 +296,7 @@ class ACF_REST_WC_Tax_Options_Settings {
         if (isset($data['shipping_tax_class'])) {
             $value = sanitize_text_field($data['shipping_tax_class']);
             $valid_classes = array_keys($this->get_shipping_tax_class_choices());
+            
             if (in_array($value, $valid_classes, true)) {
                 if (update_option(self::OPTION_SHIPPING_TAX_CLASS, $value)) {
                     $updated['shipping_tax_class'] = $value;
@@ -226,20 +317,76 @@ class ACF_REST_WC_Tax_Options_Settings {
             }
         }
 
-        // Update tax_classes
-        if (isset($data['tax_classes'])) {
-            $value = $data['tax_classes'];
+        // Update tax_display_shop
+        if (isset($data['tax_display_shop'])) {
+            $value = sanitize_text_field($data['tax_display_shop']);
+            $valid_options = array_keys($this->get_tax_display_options());
             
-            // Handle array input (convert to newline-separated string)
-            if (is_array($value)) {
-                $value = implode("\n", array_map('sanitize_text_field', $value));
+            if (in_array($value, $valid_options, true)) {
+                if (update_option(self::OPTION_TAX_DISPLAY_SHOP, $value)) {
+                    $updated['tax_display_shop'] = $value;
+                }
             } else {
-                $value = sanitize_textarea_field($value);
+                $errors['tax_display_shop'] = sprintf(
+                    __('Invalid value. Must be one of: %s', 'acf-rest-api'),
+                    implode(', ', $valid_options)
+                );
+            }
+        }
+
+        // Update tax_display_cart
+        if (isset($data['tax_display_cart'])) {
+            $value = sanitize_text_field($data['tax_display_cart']);
+            $valid_options = array_keys($this->get_tax_display_options());
+            
+            if (in_array($value, $valid_options, true)) {
+                if (update_option(self::OPTION_TAX_DISPLAY_CART, $value)) {
+                    $updated['tax_display_cart'] = $value;
+                }
+            } else {
+                $errors['tax_display_cart'] = sprintf(
+                    __('Invalid value. Must be one of: %s', 'acf-rest-api'),
+                    implode(', ', $valid_options)
+                );
+            }
+        }
+
+        // Update tax_total_display
+        if (isset($data['tax_total_display'])) {
+            $value = sanitize_text_field($data['tax_total_display']);
+            $valid_options = array_keys($this->get_tax_total_display_options());
+            
+            if (in_array($value, $valid_options, true)) {
+                if (update_option(self::OPTION_TAX_TOTAL_DISPLAY, $value)) {
+                    $updated['tax_total_display'] = $value;
+                }
+            } else {
+                $errors['tax_total_display'] = sprintf(
+                    __('Invalid value. Must be one of: %s', 'acf-rest-api'),
+                    implode(', ', $valid_options)
+                );
+            }
+        }
+
+        // Update tax_classes - Note: This is complex as it requires updating tax rates
+        if (isset($data['tax_classes'])) {
+            // WooCommerce stores additional tax classes as newline-separated string
+            if (is_array($data['tax_classes'])) {
+                $classes = array_map('sanitize_text_field', $data['tax_classes']);
+                $value = implode("\n", $classes);
+            } else {
+                $value = sanitize_textarea_field($data['tax_classes']);
             }
             
             if (update_option(self::OPTION_TAX_CLASSES, $value)) {
                 $updated['tax_classes'] = $value;
             }
+        }
+
+        // Clear WooCommerce cache after updating
+        if (!empty($updated)) {
+            WC_Cache_Helper::invalidate_cache_group('taxes');
+            delete_transient('wc_tax_rates');
         }
 
         return [
@@ -331,6 +478,7 @@ class ACF_REST_WC_Tax_Options_Settings {
         return new WP_REST_Response([
             'success' => true,
             'data'    => $result['options'],
+            'meta'    => $result['meta'],
         ], 200);
     }
 
