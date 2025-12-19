@@ -6,33 +6,64 @@ steps:
       - |
         apt-get update && apt-get install -y zip jq
         
-        # ใช้ $$ เพื่อบอก Cloud Build ว่านี่คือตัวแปรของ Bash ไม่ใช่ Substitution
+        # Extract version from plugin header
         VERSION=$$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}.php | head -1)
+        echo "========================================="
         echo "Building version: $$VERSION"
+        echo "========================================="
         
+        # Create plugin directory structure
         mkdir -p build/${_PLUGIN_SLUG}
+        
+        # Copy plugin files
         cp ${_PLUGIN_SLUG}.php build/${_PLUGIN_SLUG}/
         cp -r includes build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         cp readme.txt build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         
-        cd build && zip -r plugin.zip ${_PLUGIN_SLUG}
+        # Create ZIP with correct structure: acf-rest-api/acf-rest-api.php
+        cd build
+        zip -r ${_PLUGIN_SLUG}.zip ${_PLUGIN_SLUG}
         
+        # Verify ZIP structure
+        echo "ZIP contents:"
+        unzip -l ${_PLUGIN_SLUG}.zip
+        
+        # Update plugin-info.json with correct version AND download_url
         cp ../plugin-info.json . 2>/dev/null || echo '{}' > plugin-info.json
         
-        # ใช้ $$VERSION ตรงนี้ด้วยครับ
+        # Update both version and download_url
         jq --arg v "$$VERSION" \
            --arg url "https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip" \
-           '.version=$v|.download_url=$url' plugin-info.json > tmp.json && mv tmp.json plugin-info.json
+           --arg date "$$(date -u +"%Y-%m-%d %H:%M:%S")" \
+           '.version=$$v | .download_url=$$url | .last_updated=$$date' plugin-info.json > tmp.json && mv tmp.json plugin-info.json
+        
+        echo "Updated plugin-info.json:"
+        cat plugin-info.json
+        
+        cd ..
 
   - name: 'gcr.io/cloud-builders/gsutil'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        gsutil cp build/plugin.zip gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip
-        gsutil -h "Cache-Control:no-cache" cp build/plugin-info.json gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json
+        echo "Uploading to GCS..."
+        
+        # Upload ZIP file
+        gsutil -h "Cache-Control:no-cache, max-age=0" cp build/${_PLUGIN_SLUG}.zip gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip
+        
+        # Upload plugin-info.json with no-cache header
+        gsutil -h "Cache-Control:no-cache, max-age=0" -h "Content-Type:application/json" cp build/plugin-info.json gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json
+        
+        # Set public access
         gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip || true
         gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json || true
+        
+        echo "========================================="
+        echo "Deployment complete!"
+        echo "ZIP: https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip"
+        echo "Info: https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json"
+        echo "========================================="
 
 substitutions:
   _BUCKET: 'tanapon-wp-plugins'

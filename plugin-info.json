@@ -1,7 +1,7 @@
 {
     "name": "ACF REST API Extended",
     "slug": "acf-rest-api",
-    "version": "1.1.5",
+    "version": "1.1.7",
     "author": "<a href='https://example.com'>TanaponBB</a>",
     "author_profile": "https://example.com",
     "homepage": "https://example.com/plugins/acf-rest-api",
@@ -9,13 +9,13 @@
     "tested": "6.7",
     "requires_php": "7.4",
     "downloaded": 0,
-    "last_updated": "2025-01-01 00:00:00",
-    "download_url": "https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/acf-rest-api-1.0.0.zip",
+    "last_updated": "2025-12-19 00:00:00",
+    "download_url": "https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/acf-rest-api.zip",
     "sections": {
-        "description": "<p>Extends WordPress REST API with ACF Options and GTM Tracking endpoints.</p><h4>Features</h4><ul><li><strong>ACF Options API</strong> - GET and POST endpoints for all ACF option fields</li><li><strong>GTM Tracking</strong> - Dedicated endpoints and admin page for Google Tag Manager</li><li><strong>WooCommerce Settings</strong> - Coupon and Tax enable/disable via REST API</li><li><strong>Auto-Updates</strong> - Automatic updates from Google Cloud Storage</li></ul>",
-        "installation": "<ol><li>Upload the plugin files to <code>/wp-content/plugins/acf-rest-api</code></li><li>Activate the plugin through the 'Plugins' screen</li><li>Ensure ACF is installed and activated</li><li>Configure GTM tracking in the 'GTM Tracking' admin menu</li></ol>",
-        "changelog": "<h4>1.1.5 - Initial Release</h4><ul><li>Options REST API endpoints</li><li>Remove Unuse file</li><li>WooCommerce Coupon settings endpoint</li><li>WooCommerce Tax settings endpoint</li><li>Auto-update support via GCS</li></ul>",
-        "faq": "<h4>Does this require ACF Pro?</h4><p>No, works with both ACF Free and Pro.</p><h4>How do I secure the API endpoints?</h4><p>Read operations are public by default. Write operations require authentication. Modify permission callbacks in class-rest-endpoints.php as needed.</p>"
+        "description": "<p>Extends WordPress REST API with ACF Options and GTM Tracking endpoints.</p>",
+        "installation": "<ol><li>Upload the plugin files</li><li>Activate the plugin</li><li>Ensure ACF is installed</li></ol>",
+        "changelog": "<h4>1.1.7</h4><ul><li>Fixed auto-update system</li></ul>",
+        "faq": "<h4>Does this require ACF Pro?</h4><p>No, works with both ACF Free and Pro.</p>"
     },
     "banners": {
         "low": "https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/assets/banner-772x250.png",
@@ -25,5 +25,5 @@
         "1x": "https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/assets/icon-128x128.png",
         "2x": "https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/assets/icon-256x256.png"
     },
-    "upgrade_notice": "Version 1.1.5 - Disable Tax setting API Route."
+    "upgrade_notice": "Version 1.1.7 - Fixed auto-update system."
 }
