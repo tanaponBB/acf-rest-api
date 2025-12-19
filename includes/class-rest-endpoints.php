@@ -61,6 +61,9 @@ class ACF_REST_Endpoints {
 
         // WooCommerce Tax routes - /woocommerce-ext/v1/taxes
         $this->register_wc_tax_routes();
+
+        // WooCommerce Tax Options routes - /woocommerce-ext/v1/taxes-options
+        $this->register_wc_tax_options_routes();
     }
 
     /**
@@ -108,6 +111,7 @@ class ACF_REST_Endpoints {
             'args'                => $this->get_track_post_args(),
         ]);
     }
+
     /**
      * Register WooCommerce coupon routes
      */
@@ -159,6 +163,33 @@ class ACF_REST_Endpoints {
             'callback'            => [$wc_tax, 'rest_update_handler'],
             'permission_callback' => [$wc_tax, 'check_write_permission'],
             'args'                => $this->get_wc_tax_post_args(),
+        ]);
+    }
+
+    /**
+     * Register WooCommerce tax options routes
+     */
+    private function register_wc_tax_options_routes() {
+        if (!class_exists('ACF_REST_WC_Tax_Options_Settings')) {
+            return;
+        }
+
+        $wc_tax_options = ACF_REST_WC_Tax_Options_Settings::get_instance();
+
+        // GET /woocommerce-ext/v1/taxes-options - Get tax options
+        register_rest_route(self::WC_NAMESPACE, '/taxes-options', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$wc_tax_options, 'rest_get_handler'],
+            'permission_callback' => [$wc_tax_options, 'check_read_permission'],
+            'args'                => $this->get_wc_tax_options_get_args(),
+        ]);
+
+        // POST /woocommerce-ext/v1/taxes-options - Update tax options
+        register_rest_route(self::WC_NAMESPACE, '/taxes-options', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$wc_tax_options, 'rest_update_handler'],
+            'permission_callback' => [$wc_tax_options, 'check_write_permission'],
+            'args'                => $this->get_wc_tax_options_post_args(),
         ]);
     }
 
@@ -252,6 +283,51 @@ class ACF_REST_Endpoints {
                 'type'              => 'boolean',
                 'required'          => true,
                 'sanitize_callback' => 'rest_sanitize_boolean',
+            ],
+        ];
+    }
+
+    /**
+     * Get arguments for WC Tax Options GET request
+     *
+     * @return array
+     */
+    private function get_wc_tax_options_get_args() {
+        return [];
+    }
+
+    /**
+     * Get arguments for WC Tax Options POST request
+     *
+     * @return array
+     */
+    private function get_wc_tax_options_post_args() {
+        return [
+            'prices_include_tax' => [
+                'description'       => __('Whether prices are entered with tax included (yes/no or boolean)', 'acf-rest-api'),
+                'type'              => ['boolean', 'string'],
+                'required'          => false,
+            ],
+            'tax_based_on' => [
+                'description'       => __('Calculate tax based on: shipping, billing, or base', 'acf-rest-api'),
+                'type'              => 'string',
+                'required'          => false,
+                'enum'              => ['shipping', 'billing', 'base'],
+            ],
+            'shipping_tax_class' => [
+                'description'       => __('Shipping tax class: inherit, standard, reduced-rate, zero-rate, or custom', 'acf-rest-api'),
+                'type'              => 'string',
+                'required'          => false,
+            ],
+            'tax_round_at_subtotal' => [
+                'description'       => __('Round tax at subtotal level (yes/no or boolean)', 'acf-rest-api'),
+                'type'              => ['boolean', 'string'],
+                'required'          => false,
+            ],
+            'tax_classes' => [
+                'description'       => __('Additional tax classes (newline-separated string or array)', 'acf-rest-api'),
+                'type'              => ['string', 'array'],
+                'required'          => false,
             ],
         ];
     }
