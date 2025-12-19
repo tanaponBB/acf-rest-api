@@ -14,7 +14,7 @@
     "sections": {
         "description": "<p>Extends WordPress REST API with ACF Options and GTM Tracking endpoints.</p><h4>Features</h4><ul><li><strong>ACF Options API</strong> - GET and POST endpoints for all ACF option fields</li><li><strong>GTM Tracking</strong> - Dedicated endpoints and admin page for Google Tag Manager</li><li><strong>WooCommerce Settings</strong> - Coupon and Tax enable/disable via REST API</li><li><strong>Auto-Updates</strong> - Automatic updates from Google Cloud Storage</li></ul>",
         "installation": "<ol><li>Upload the plugin files to <code>/wp-content/plugins/acf-rest-api</code></li><li>Activate the plugin through the 'Plugins' screen</li><li>Ensure ACF is installed and activated</li><li>Configure GTM tracking in the 'GTM Tracking' admin menu</li></ol>",
-        "changelog": "<h4>1.0.1 - Initial Release</h4><ul><li>ACF Options REST API endpoints</li><li>GTM Tracking functionality with admin page</li><li>WooCommerce Coupon settings endpoint</li><li>WooCommerce Tax settings endpoint</li><li>Auto-update support via GCS</li></ul>",
+        "changelog": "<h4>1.0.3 - Initial Release</h4><ul><li>Options REST API endpoints</li><li>GTM Tracking functionality with admin page</li><li>WooCommerce Coupon settings endpoint</li><li>WooCommerce Tax settings endpoint</li><li>Auto-update support via GCS</li></ul>",
         "faq": "<h4>Does this require ACF Pro?</h4><p>No, works with both ACF Free and Pro.</p><h4>How do I secure the API endpoints?</h4><p>Read operations are public by default. Write operations require authentication. Modify permission callbacks in class-rest-endpoints.php as needed.</p>"
     },
     "banners": {
