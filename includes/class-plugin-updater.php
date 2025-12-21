@@ -19,7 +19,7 @@ class ACF_REST_Plugin_Updater {
     private $plugin_basename;
     private $update_url;
     private $cache_key = 'acf_rest_api_update_data';
-    private $cache_expiration = 43200; // 12 hours
+    private $cache_expiration = 43200;
 
     public static function get_instance() {
         if (self::$instance === null) {
@@ -48,7 +48,10 @@ class ACF_REST_Plugin_Updater {
         // Plugin information popup
         add_filter('plugins_api', [$this, 'plugin_info'], 20, 3);
         
-        // Clear cache after ANY plugin update completes
+        // CRITICAL: Fix folder name during update
+        add_filter('upgrader_source_selection', [$this, 'fix_source_dir'], 10, 4);
+        
+        // Clear cache after update
         add_action('upgrader_process_complete', [$this, 'after_update'], 10, 2);
         
         // Add "Check for updates" link
@@ -84,9 +87,9 @@ class ACF_REST_Plugin_Updater {
             return $transient;
         }
 
-        // Get fresh current version from file
+        // Force refresh remote info (bypass cache) every time WordPress checks
         $current_version = $this->get_current_version();
-        $remote_info = $this->get_remote_info();
+        $remote_info = $this->get_remote_info(true);
 
         if (!$remote_info || !isset($remote_info->version)) {
             return $transient;
@@ -95,7 +98,6 @@ class ACF_REST_Plugin_Updater {
         $remote_version = trim($remote_info->version);
         $current_version = trim($current_version);
 
-        // Only show update if remote version is GREATER than current
         if (version_compare($current_version, $remote_version, '<')) {
             $plugin_data = new stdClass();
             $plugin_data->slug = $this->plugin_slug;
@@ -112,7 +114,6 @@ class ACF_REST_Plugin_Updater {
             $transient->response[$this->plugin_basename] = $plugin_data;
             unset($transient->no_update[$this->plugin_basename]);
         } else {
-            // No update needed - remove from response, add to no_update
             $plugin_data = new stdClass();
             $plugin_data->slug = $this->plugin_slug;
             $plugin_data->plugin = $this->plugin_basename;
@@ -125,6 +126,54 @@ class ACF_REST_Plugin_Updater {
         }
 
         return $transient;
+    }
+
+    /**
+     * CRITICAL: Fix the source directory name during update
+     * 
+     * This ensures the extracted folder matches the expected plugin directory name
+     */
+    public function fix_source_dir($source, $remote_source, $upgrader, $hook_extra) {
+        global $wp_filesystem;
+        
+        // Only process our plugin
+        if (!isset($hook_extra['plugin']) || $hook_extra['plugin'] !== $this->plugin_basename) {
+            return $source;
+        }
+
+        // Expected directory name
+        $expected_slug = dirname($this->plugin_basename); // 'acf-rest-api'
+        $corrected_source = trailingslashit($remote_source) . $expected_slug . '/';
+
+        // If already correct, return as-is
+        if (trailingslashit($source) === $corrected_source) {
+            return $source;
+        }
+
+        // Check if source exists
+        if (!$wp_filesystem->exists($source)) {
+            return new WP_Error(
+                'source_not_found',
+                'Source directory not found for plugin update.'
+            );
+        }
+
+        // Remove existing corrected source if it exists
+        if ($wp_filesystem->exists($corrected_source)) {
+            $wp_filesystem->delete($corrected_source, true);
+        }
+
+        // Rename source to correct directory name
+        $result = $wp_filesystem->move($source, $corrected_source, true);
+        
+        if (!$result) {
+            return new WP_Error(
+                'rename_failed',
+                'Could not rename plugin directory during update.'
+            );
+        }
+
+        return $corrected_source;
     }
 
     /**
@@ -192,7 +241,6 @@ class ACF_REST_Plugin_Updater {
             }
         }
 
-        // Add cache buster to URL
         $url = add_query_arg('t', time(), $this->update_url);
         
         $response = wp_remote_get($url, [
@@ -232,7 +280,6 @@ class ACF_REST_Plugin_Updater {
             return;
         }
 
-        // Check if our plugin was updated
         $our_plugin_updated = false;
         
         if (isset($options['plugins']) && is_array($options['plugins'])) {
@@ -242,13 +289,8 @@ class ACF_REST_Plugin_Updater {
         }
 
         if ($our_plugin_updated) {
-            // Clear our cache
             delete_transient($this->cache_key);
-            
-            // Force WordPress to re-check plugins
             delete_site_transient('update_plugins');
-            
-            // Clear plugin cache
             wp_clean_plugins_cache(true);
         }
     }
@@ -287,12 +329,9 @@ class ACF_REST_Plugin_Updater {
             return;
         }
 
-        // Clear ALL caches
         delete_transient($this->cache_key);
         delete_site_transient('update_plugins');
         wp_clean_plugins_cache(true);
-        
-        // Force check
         wp_update_plugins();
 
         wp_redirect(admin_url('plugins.php?acf_rest_api_checked=1'));
