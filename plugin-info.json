@@ -1,7 +1,7 @@
 {
     "name": "ACF REST API Extended",
     "slug": "acf-rest-api",
-    "version": "1.2.8",
+    "version": "1.2.9",
     "author": "<a href='https://example.com'>TanaponBB</a>",
     "author_profile": "https://example.com",
     "homepage": "https://example.com/plugins/acf-rest-api",
@@ -14,7 +14,7 @@
     "sections": {
         "description": "<p>Extends WordPress REST API with ACF Options and GTM Tracking endpoints.</p>",
         "installation": "<ol><li>Upload the plugin files</li><li>Activate the plugin</li><li>Ensure ACF is installed</li></ol>",
-        "changelog": "<h4>1.2.8</h4><ul><li>Version Upgrade</li></ul>",
+        "changelog": "<h4>1.2.9</h4><ul><li>Version Upgrade</li></ul>",
         "faq": "<h4>Does this require ACF Pro?</h4><p>No, works with both ACF Free and Pro.</p>"
     },
     "banners": {
@@ -25,5 +25,5 @@
         "1x": "https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/assets/icon-128x128.png",
         "2x": "https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/assets/icon-256x256.png"
     },
-    "upgrade_notice": "Version 1.2.8 - Fixed auto-update system."
+    "upgrade_notice": "Version 1.2.9 - Fixed auto-update system."
 }
