@@ -46,11 +46,16 @@ class ACF_REST_GTM_Tracking {
      * Initialize hooks
      */
     private function init_hooks() {
-        // Create ACF options page - Priority 10 for acf/init
-        add_action('acf/init', [$this, 'create_options_page'], 10);
-        
-        // Register ACF fields programmatically
-        add_action('acf/init', [$this, 'register_acf_fields'], 20);
+        // Create ACF options page - ใช้ทั้ง acf/init และ init เป็น fallback
+        if (did_action('acf/init')) {
+            // ACF already initialized, create page immediately
+            $this->create_options_page();
+            $this->register_acf_fields();
+        } else {
+            // Wait for ACF to initialize
+            add_action('acf/init', [$this, 'create_options_page'], 5);
+            add_action('acf/init', [$this, 'register_acf_fields'], 10);
+        }
         
         // Inject tracking scripts - Priority 1 to inject early in head/body
         add_action('wp_head', [$this, 'inject_header_tracking'], 1);
@@ -68,12 +73,18 @@ class ACF_REST_GTM_Tracking {
             return;
         }
 
+        // Check if page already exists
+        global $acf_options_pages;
+        if (isset($acf_options_pages['gtm_tracking'])) {
+            return;
+        }
+
         acf_add_options_page([
             'page_title'      => __('GTM Tracking', 'acf-rest-api'),
             'menu_title'      => __('GTM Tracking', 'acf-rest-api'),
             'menu_slug'       => 'gtm_tracking',
             'capability'      => 'manage_options',
-            'position'        => 20,
+            'position'        => 80,
             'post_id'         => self::OPTIONS_POST_ID,
             'redirect'        => false,
             'icon_url'        => 'dashicons-chart-area',
@@ -196,11 +207,18 @@ class ACF_REST_GTM_Tracking {
             return;
         }
 
+        // Prevent double output
+        static $already_output = false;
+        if ($already_output) {
+            return;
+        }
+
         $tracking_body = get_field('gtm_tracking_body', self::OPTIONS_POST_ID);
         
         if (!empty($tracking_body)) {
             echo "\n<!-- GTM Tracking Body - ACF REST API Plugin -->\n";
             echo $tracking_body . "\n";
+            $already_output = true;
             
             /**
              * Action hook after GTM body code is injected

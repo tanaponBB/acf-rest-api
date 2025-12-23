@@ -3,7 +3,7 @@
  * Plugin Name: REST API Extended
  * Plugin URI: https://example.com/plugins/acf-rest-api
  * Description: Extends WordPress REST API with ACF Options and GTM Tracking endpoints. Provides GET/POST routes for managing ACF option fields and GTM tracking settings.
- * Version: 1.3.2
+ * Version: 1.3.3
  * Author: TanaponBB
  * Author URI: https://example.com
  * License: GPL v2 or later
@@ -19,7 +19,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin constants - VERSION MUST MATCH HEADER ABOVE!
-define('ACF_REST_API_VERSION', '1.3.2');
+define('ACF_REST_API_VERSION', '1.3.3');
 define('ACF_REST_API_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ACF_REST_API_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -49,9 +49,19 @@ class ACF_REST_API_Plugin {
     }
 
     private function init_hooks() {
-        add_action('plugins_loaded', [$this, 'load_dependencies']);
+        // Load dependencies early
+        add_action('plugins_loaded', [$this, 'load_dependencies'], 5);
+        
+        // Initialize GTM Tracking early (before acf/init if possible)
+        add_action('plugins_loaded', [$this, 'init_gtm_tracking'], 10);
+        
+        // Initialize other components
         add_action('init', [$this, 'init_components']);
+        
+        // Register REST routes
         add_action('rest_api_init', [$this, 'register_rest_routes']);
+        
+        // Admin notices
         add_action('admin_notices', [$this, 'check_dependencies']);
         add_action('admin_notices', [$this, 'show_update_check_notice']);
     }
@@ -67,11 +77,16 @@ class ACF_REST_API_Plugin {
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-tax-rates.php';
     }
 
-    public function init_components() {
+    /**
+     * Initialize GTM Tracking early to catch acf/init hook
+     */
+    public function init_gtm_tracking() {
         if (class_exists('ACF_REST_GTM_Tracking')) {
             ACF_REST_GTM_Tracking::get_instance();
         }
-        
+    }
+
+    public function init_components() {
         if (class_exists('ACF_REST_Options_API')) {
             ACF_REST_Options_API::get_instance();
         }
@@ -154,4 +169,5 @@ function acf_rest_api_init() {
     return ACF_REST_API_Plugin::get_instance();
 }
 
-add_action('plugins_loaded', 'acf_rest_api_init', 5);
+// Initialize plugin early at plugins_loaded priority 1
+add_action('plugins_loaded', 'acf_rest_api_init', 1);
