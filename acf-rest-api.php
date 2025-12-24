@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: ACF REST API Extended
+ * Plugin Name: REST API Extended
  * Plugin URI: https://example.com/plugins/acf-rest-api
  * Description: Extends WordPress REST API with ACF Options and GTM Tracking endpoints. Provides GET/POST routes for managing ACF option fields and GTM tracking settings.
- * Version: 1.0.0
+ * Version: 1.3.4
  * Author: TanaponBB
  * Author URI: https://example.com
  * License: GPL v2 or later
@@ -18,18 +18,13 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Plugin constants
-define('ACF_REST_API_VERSION', '1.0.1');
+// Plugin constants - VERSION MUST MATCH HEADER ABOVE!
+define('ACF_REST_API_VERSION', '1.3.4');
 define('ACF_REST_API_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ACF_REST_API_PLUGIN_URL', plugin_dir_url(__FILE__));
 
 /**
  * Auto-Update Configuration
- * 
- * Set your Google Cloud Storage bucket URL here.
- * The URL should point to a JSON file containing plugin update information.
- * 
- * Example: https://storage.googleapis.com/your-bucket-name/acf-rest-api/plugin-info.json
  */
 if (!defined('ACF_REST_API_UPDATE_URL')) {
     define('ACF_REST_API_UPDATE_URL', 'https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/plugin-info.json');
@@ -40,14 +35,8 @@ if (!defined('ACF_REST_API_UPDATE_URL')) {
  */
 class ACF_REST_API_Plugin {
 
-    /**
-     * Single instance of the class
-     */
     private static $instance = null;
 
-    /**
-     * Get single instance
-     */
     public static function get_instance() {
         if (self::$instance === null) {
             self::$instance = new self();
@@ -55,24 +44,21 @@ class ACF_REST_API_Plugin {
         return self::$instance;
     }
 
-    /**
-     * Constructor
-     */
     private function __construct() {
         $this->init_hooks();
     }
 
-    /**
-     * Initialize hooks
-     */
     private function init_hooks() {
-        // Load required files
-        add_action('plugins_loaded', [$this, 'load_dependencies']);
+        // Load dependencies early
+        add_action('plugins_loaded', [$this, 'load_dependencies'], 5);
         
-        // Initialize components
+        // Initialize GTM Tracking early (before acf/init if possible)
+        add_action('plugins_loaded', [$this, 'init_gtm_tracking'], 10);
+        
+        // Initialize other components
         add_action('init', [$this, 'init_components']);
         
-        // Register REST API routes
+        // Register REST routes
         add_action('rest_api_init', [$this, 'register_rest_routes']);
         
         // Admin notices
@@ -80,9 +66,6 @@ class ACF_REST_API_Plugin {
         add_action('admin_notices', [$this, 'show_update_check_notice']);
     }
 
-    /**
-     * Load dependencies
-     */
     public function load_dependencies() {
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-options-api.php';
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-gtm-tracking.php';
@@ -90,41 +73,45 @@ class ACF_REST_API_Plugin {
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-plugin-updater.php';
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-coupon-setting.php';
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-tax-setting.php';
+        require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-tax-options-setting.php';
+        require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-tax-rates.php';
     }
 
     /**
-     * Initialize components
+     * Initialize GTM Tracking early to catch acf/init hook
      */
-    public function init_components() {
-        // Initialize GTM Tracking
+    public function init_gtm_tracking() {
         if (class_exists('ACF_REST_GTM_Tracking')) {
             ACF_REST_GTM_Tracking::get_instance();
         }
-        
-        // Initialize Options API
+    }
+
+    public function init_components() {
         if (class_exists('ACF_REST_Options_API')) {
             ACF_REST_Options_API::get_instance();
         }
 
-        // Initialize Auto-Updater
         if (class_exists('ACF_REST_Plugin_Updater')) {
             ACF_REST_Plugin_Updater::get_instance();
         }
 
-        // Initialize WooCommerce Coupon Settings
         if (class_exists('ACF_REST_WC_Coupon_Settings')) {
             ACF_REST_WC_Coupon_Settings::get_instance();
         }
 
-        // Initialize WooCommerce Tax Settings
         if (class_exists('ACF_REST_WC_Tax_Settings')) {
             ACF_REST_WC_Tax_Settings::get_instance();
         }
+
+        if (class_exists('ACF_REST_WC_Tax_Options_Settings')) {
+            ACF_REST_WC_Tax_Options_Settings::get_instance();
+        }
+
+        if (class_exists('ACF_REST_WC_Tax_Rates')) {
+            ACF_REST_WC_Tax_Rates::get_instance();
+        }
     }
 
-    /**
-     * Register REST API routes
-     */
     public function register_rest_routes() {
         if (class_exists('ACF_REST_Endpoints')) {
             $endpoints = ACF_REST_Endpoints::get_instance();
@@ -132,9 +119,6 @@ class ACF_REST_API_Plugin {
         }
     }
 
-    /**
-     * Check for required dependencies
-     */
     public function check_dependencies() {
         if (!function_exists('get_field')) {
             ?>
@@ -148,9 +132,6 @@ class ACF_REST_API_Plugin {
         }
     }
 
-    /**
-     * Show notice after manual update check
-     */
     public function show_update_check_notice() {
         if (isset($_GET['acf_rest_api_checked'])) {
             ?>
@@ -164,45 +145,29 @@ class ACF_REST_API_Plugin {
         }
     }
 
-    /**
-     * Plugin activation
-     */
     public static function activate() {
-        // Create options page on activation if ACF is available
         if (function_exists('acf_add_options_page')) {
             self::create_options_pages();
         }
-        
-        // Flush rewrite rules
         flush_rewrite_rules();
     }
 
-    /**
-     * Plugin deactivation
-     */
     public static function deactivate() {
-        // Clear update cache
         delete_transient('acf_rest_api_update_data');
-        
         flush_rewrite_rules();
     }
 
-    /**
-     * Create ACF options pages
-     */
     private static function create_options_pages() {
-        // This will be handled by the GTM Tracking class
+        // Handled by GTM Tracking class
     }
 }
 
-// Activation/Deactivation hooks
 register_activation_hook(__FILE__, ['ACF_REST_API_Plugin', 'activate']);
 register_deactivation_hook(__FILE__, ['ACF_REST_API_Plugin', 'deactivate']);
 
-// Initialize the plugin
 function acf_rest_api_init() {
     return ACF_REST_API_Plugin::get_instance();
 }
 
-// Start the plugin
-add_action('plugins_loaded', 'acf_rest_api_init', 5);
+// Initialize plugin early at plugins_loaded priority 1
+add_action('plugins_loaded', 'acf_rest_api_init', 1);
