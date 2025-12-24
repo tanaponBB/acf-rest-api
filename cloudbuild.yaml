@@ -67,7 +67,7 @@ steps:
 
 substitutions:
   _BUCKET: 'tanapon-wp-plugins'
-  _PLUGIN_SLUG: 'acf-rest-api'
+  _PLUGIN_SLUG: 'acf-rest-api-test'
 
 options:
   logging: CLOUD_LOGGING_ONLY
