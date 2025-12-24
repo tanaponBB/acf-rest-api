@@ -402,10 +402,10 @@ class ACF_REST_Plugin_Updater {
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  1. WordPress เรียก check_for_update()                  │
-│     └── ดึง plugin-info.json จาก GCS                    │
-│     └── เปรียบเทียบ: local 1.3.3 vs remote 1.3.4       │
-│     └── ถ้า remote > local → แสดง "Update available"   │
+│  1. WordPress เรียก check_for_update()                   │
+│     └── ดึง plugin-info.json จาก GCS                     │
+│     └── เปรียบเทียบ: local 1.3.3 vs remote 1.3.4          │
+│     └── ถ้า remote > local → แสดง "Update available"     │
 └─────────────────────────────────────────────────────────┘
                          │
                          ▼
@@ -418,16 +418,16 @@ class ACF_REST_Plugin_Updater {
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │  3. fix_source_dir() ทำงาน                              │
-│     └── ตรวจสอบชื่อ folder ที่แตกออกมา                   │
-│     └── Rename เป็น "acf-rest-api" (ถ้าจำเป็น)          │
+│     └── ตรวจสอบชื่อ folder ที่แตกออกมา                      │
+│     └── Rename เป็น "acf-rest-api" (ถ้าจำเป็น)             │
 └─────────────────────────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│  4. WordPress ติดตั้ง plugin                            │
-│     └── ลบ folder เก่า                                  │
-│     └── Copy folder ใหม่ไปที่ /wp-content/plugins/      │
-│     └── Activate plugin                                │
+│  4. WordPress ติดตั้ง plugin                               │
+│     └── ลบ folder เก่า                                   │
+│     └── Copy folder ใหม่ไปที่ /wp-content/plugins/         │
+│     └── Activate plugin                                 │
 └─────────────────────────────────────────────────────────┘
 ```
 

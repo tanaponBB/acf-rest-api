@@ -65,10 +65,6 @@ steps:
         echo "Info: https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json"
         echo "========================================="
 
-# substitutions:
-#   _BUCKET: 'tanapon-wp-plugins'
-#   _PLUGIN_SLUG: 'acf-rest-api'
-
 options:
   logging: CLOUD_LOGGING_ONLY
 
