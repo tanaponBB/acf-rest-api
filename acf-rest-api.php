@@ -1,13 +1,12 @@
 <?php
+
 /**
  * Plugin Name: REST API Extended
- * Plugin URI: https://example.com/plugins/acf-rest-api
+ * Plugin URI: https://theneighbors.co/
  * Description: Extends WordPress REST API with ACF Options and GTM Tracking endpoints. Provides GET/POST routes for managing ACF option fields and GTM tracking settings.
- * Version: 1.3.4
+ * Version: 1.4.1
  * Author: TanaponBB
- * Author URI: https://example.com
- * License: GPL v2 or later
- * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Author URI: https://theneighbors.co/
  * Text Domain: acf-rest-api
  * Domain Path: /languages
  * Requires at least: 5.8
@@ -18,8 +17,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Plugin constants - VERSION MUST MATCH HEADER ABOVE!
-define('ACF_REST_API_VERSION', '1.3.4');
+// Plugin constants
+define('ACF_REST_API_VERSION', '1.4.1');
 define('ACF_REST_API_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ACF_REST_API_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -27,46 +26,42 @@ define('ACF_REST_API_PLUGIN_URL', plugin_dir_url(__FILE__));
  * Auto-Update Configuration
  */
 if (!defined('ACF_REST_API_UPDATE_URL')) {
-    define('ACF_REST_API_UPDATE_URL', 'https://storage.googleapis.com/tanapon-wp-plugins/acf-rest-api/plugin-info.json');
+    define('ACF_REST_API_UPDATE_URL', 'https://storage.googleapis.com/simplybuild-wp/acf-rest-api/plugin-info.json');
 }
 
 /**
  * Main Plugin Class
  */
-class ACF_REST_API_Plugin {
+class ACF_REST_API_Plugin
+{
 
     private static $instance = null;
 
-    public static function get_instance() {
+    public static function get_instance()
+    {
         if (self::$instance === null) {
             self::$instance = new self();
         }
         return self::$instance;
     }
 
-    private function __construct() {
+    private function __construct()
+    {
         $this->init_hooks();
     }
 
-    private function init_hooks() {
-        // Load dependencies early
+    private function init_hooks()
+    {
         add_action('plugins_loaded', [$this, 'load_dependencies'], 5);
-        
-        // Initialize GTM Tracking early (before acf/init if possible)
         add_action('plugins_loaded', [$this, 'init_gtm_tracking'], 10);
-        
-        // Initialize other components
         add_action('init', [$this, 'init_components']);
-        
-        // Register REST routes
         add_action('rest_api_init', [$this, 'register_rest_routes']);
-        
-        // Admin notices
         add_action('admin_notices', [$this, 'check_dependencies']);
         add_action('admin_notices', [$this, 'show_update_check_notice']);
     }
 
-    public function load_dependencies() {
+    public function load_dependencies()
+    {
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-options-api.php';
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-gtm-tracking.php';
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-rest-endpoints.php';
@@ -77,16 +72,15 @@ class ACF_REST_API_Plugin {
         require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-tax-rates.php';
     }
 
-    /**
-     * Initialize GTM Tracking early to catch acf/init hook
-     */
-    public function init_gtm_tracking() {
+    public function init_gtm_tracking()
+    {
         if (class_exists('ACF_REST_GTM_Tracking')) {
             ACF_REST_GTM_Tracking::get_instance();
         }
     }
 
-    public function init_components() {
+    public function init_components()
+    {
         if (class_exists('ACF_REST_Options_API')) {
             ACF_REST_Options_API::get_instance();
         }
@@ -112,52 +106,58 @@ class ACF_REST_API_Plugin {
         }
     }
 
-    public function register_rest_routes() {
+    public function register_rest_routes()
+    {
         if (class_exists('ACF_REST_Endpoints')) {
             $endpoints = ACF_REST_Endpoints::get_instance();
             $endpoints->register_routes();
         }
     }
 
-    public function check_dependencies() {
+    public function check_dependencies()
+    {
         if (!function_exists('get_field')) {
-            ?>
+?>
             <div class="notice notice-error">
                 <p>
-                    <strong><?php _e('ACF REST API Extended:', 'acf-rest-api'); ?></strong>
+                    <strong><?php _e('REST API Extended:', 'acf-rest-api'); ?></strong>
                     <?php _e('This plugin requires Advanced Custom Fields (ACF) to be installed and activated.', 'acf-rest-api'); ?>
                 </p>
             </div>
-            <?php
+        <?php
         }
     }
 
-    public function show_update_check_notice() {
+    public function show_update_check_notice()
+    {
         if (isset($_GET['acf_rest_api_checked'])) {
-            ?>
+        ?>
             <div class="notice notice-success is-dismissible">
                 <p>
-                    <strong><?php _e('ACF REST API Extended:', 'acf-rest-api'); ?></strong>
+                    <strong><?php _e('REST API Extended:', 'acf-rest-api'); ?></strong>
                     <?php _e('Update check completed. If an update is available, it will appear below.', 'acf-rest-api'); ?>
                 </p>
             </div>
-            <?php
+<?php
         }
     }
 
-    public static function activate() {
+    public static function activate()
+    {
         if (function_exists('acf_add_options_page')) {
             self::create_options_pages();
         }
         flush_rewrite_rules();
     }
 
-    public static function deactivate() {
+    public static function deactivate()
+    {
         delete_transient('acf_rest_api_update_data');
         flush_rewrite_rules();
     }
 
-    private static function create_options_pages() {
+    private static function create_options_pages()
+    {
         // Handled by GTM Tracking class
     }
 }
@@ -165,9 +165,9 @@ class ACF_REST_API_Plugin {
 register_activation_hook(__FILE__, ['ACF_REST_API_Plugin', 'activate']);
 register_deactivation_hook(__FILE__, ['ACF_REST_API_Plugin', 'deactivate']);
 
-function acf_rest_api_init() {
+function acf_rest_api_init()
+{
     return ACF_REST_API_Plugin::get_instance();
 }
 
-// Initialize plugin early at plugins_loaded priority 1
 add_action('plugins_loaded', 'acf_rest_api_init', 1);

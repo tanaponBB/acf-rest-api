@@ -1,11 +1,9 @@
 <?php
 /**
- * Plugin Auto-Updater
- *
- * Handles automatic plugin updates from Google Cloud Storage bucket.
+ * Plugin Auto-Updater with Signed URL Support
  *
  * @package ACF_REST_API
- * @since 1.0.0
+ * @since 1.4.0
  */
 
 if (!defined('ABSPATH')) {
@@ -19,7 +17,7 @@ class ACF_REST_Plugin_Updater {
     private $plugin_basename;
     private $update_url;
     private $cache_key = 'acf_rest_api_update_data';
-    private $cache_expiration = 43200;
+    private $cache_expiration = 3600; // 1 hour (shorter due to 1-day URL expiry)
 
     public static function get_instance() {
         if (self::$instance === null) {
@@ -42,28 +40,15 @@ class ACF_REST_Plugin_Updater {
     }
 
     private function init_hooks() {
-        // Check for updates
         add_filter('pre_set_site_transient_update_plugins', [$this, 'check_for_update']);
-        
-        // Plugin information popup
         add_filter('plugins_api', [$this, 'plugin_info'], 20, 3);
-        
-        // CRITICAL: Fix folder name during update
         add_filter('upgrader_source_selection', [$this, 'fix_source_dir'], 10, 4);
-        
-        // Clear cache after update
         add_action('upgrader_process_complete', [$this, 'after_update'], 10, 2);
-        
-        // Add "Check for updates" link
         add_filter('plugin_action_links_' . $this->plugin_basename, [$this, 'add_action_links']);
-        
-        // Handle manual update check
         add_action('admin_init', [$this, 'handle_manual_update_check']);
+        add_action('admin_notices', [$this, 'check_url_expiry_notice']);
     }
 
-    /**
-     * Get current installed version from plugin file
-     */
     private function get_current_version() {
         if (!function_exists('get_plugin_data')) {
             require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -79,15 +64,11 @@ class ACF_REST_Plugin_Updater {
         return '0.0.0';
     }
 
-    /**
-     * Check for plugin updates
-     */
     public function check_for_update($transient) {
         if (empty($transient->checked)) {
             return $transient;
         }
 
-        // Force refresh remote info (bypass cache) every time WordPress checks
         $current_version = $this->get_current_version();
         $remote_info = $this->get_remote_info(true);
 
@@ -128,57 +109,69 @@ class ACF_REST_Plugin_Updater {
         return $transient;
     }
 
-    /**
-     * CRITICAL: Fix the source directory name during update
-     * 
-     * This ensures the extracted folder matches the expected plugin directory name
-     */
+    private function is_download_url_expired($remote_info) {
+        if (!isset($remote_info->download_url_expires)) {
+            return false;
+        }
+        
+        $expiry_time = strtotime($remote_info->download_url_expires . ' UTC');
+        return $expiry_time && time() > $expiry_time;
+    }
+
+    public function check_url_expiry_notice() {
+        if (!current_user_can('update_plugins')) {
+            return;
+        }
+
+        $remote_info = $this->get_remote_info();
+        
+        if ($remote_info && $this->is_download_url_expired($remote_info)) {
+            $current_version = $this->get_current_version();
+            
+            if (version_compare($current_version, $remote_info->version, '<')) {
+                ?>
+                <div class="notice notice-warning">
+                    <p>
+                        <strong><?php _e('REST API Extended:', 'acf-rest-api'); ?></strong>
+                        <?php _e('Update available but download URL has expired. Please wait for auto-refresh or contact developer.', 'acf-rest-api'); ?>
+                    </p>
+                </div>
+                <?php
+            }
+        }
+    }
+
     public function fix_source_dir($source, $remote_source, $upgrader, $hook_extra) {
         global $wp_filesystem;
         
-        // Only process our plugin
         if (!isset($hook_extra['plugin']) || $hook_extra['plugin'] !== $this->plugin_basename) {
             return $source;
         }
 
-        // Expected directory name
-        $expected_slug = dirname($this->plugin_basename); // 'acf-rest-api'
+        $expected_slug = dirname($this->plugin_basename);
         $corrected_source = trailingslashit($remote_source) . $expected_slug . '/';
 
-        // If already correct, return as-is
         if (trailingslashit($source) === $corrected_source) {
             return $source;
         }
 
-        // Check if source exists
         if (!$wp_filesystem->exists($source)) {
-            return new WP_Error(
-                'source_not_found',
-                'Source directory not found for plugin update.'
-            );
+            return new WP_Error('source_not_found', 'Source directory not found.');
         }
 
-        // Remove existing corrected source if it exists
         if ($wp_filesystem->exists($corrected_source)) {
             $wp_filesystem->delete($corrected_source, true);
         }
 
-        // Rename source to correct directory name
         $result = $wp_filesystem->move($source, $corrected_source, true);
         
         if (!$result) {
-            return new WP_Error(
-                'rename_failed',
-                'Could not rename plugin directory during update.'
-            );
+            return new WP_Error('rename_failed', 'Could not rename plugin directory.');
         }
 
         return $corrected_source;
     }
 
-    /**
-     * Plugin information for the popup
-     */
     public function plugin_info($result, $action, $args) {
         if ($action !== 'plugin_information') {
             return $result;
@@ -195,7 +188,7 @@ class ACF_REST_Plugin_Updater {
         }
 
         $plugin_info = new stdClass();
-        $plugin_info->name = $remote_info->name ?? 'ACF REST API Extended';
+        $plugin_info->name = $remote_info->name ?? 'REST API Extended';
         $plugin_info->slug = $this->plugin_slug;
         $plugin_info->version = $remote_info->version ?? '0.0.0';
         $plugin_info->author = $remote_info->author ?? '';
@@ -215,6 +208,11 @@ class ACF_REST_Plugin_Updater {
             }
         }
 
+        if ($this->is_download_url_expired($remote_info)) {
+            $plugin_info->sections['upgrade_notice'] = 
+                '<p style="color: #d63638;"><strong>⚠️ Download URL expired. Waiting for auto-refresh...</strong></p>';
+        }
+
         if (isset($remote_info->banners)) {
             $plugin_info->banners = (array) $remote_info->banners;
         }
@@ -226,9 +224,6 @@ class ACF_REST_Plugin_Updater {
         return $plugin_info;
     }
 
-    /**
-     * Get remote plugin info from GCS
-     */
     private function get_remote_info($force_refresh = false) {
         if (empty($this->update_url)) {
             return false;
@@ -272,9 +267,6 @@ class ACF_REST_Plugin_Updater {
         return $data;
     }
 
-    /**
-     * After plugin update - clear all caches
-     */
     public function after_update($upgrader, $options) {
         if ($options['action'] !== 'update' || $options['type'] !== 'plugin') {
             return;
@@ -295,9 +287,6 @@ class ACF_REST_Plugin_Updater {
         }
     }
 
-    /**
-     * Add action links to plugins page
-     */
     public function add_action_links($links) {
         $check_update_link = sprintf(
             '<a href="%s">%s</a>',
@@ -313,9 +302,6 @@ class ACF_REST_Plugin_Updater {
         return $links;
     }
 
-    /**
-     * Handle manual update check
-     */
     public function handle_manual_update_check() {
         if (!isset($_GET['acf_rest_api_check_update'])) {
             return;
