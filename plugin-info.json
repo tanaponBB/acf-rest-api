@@ -1,7 +1,7 @@
 {
     "name": "REST API Extended",
     "slug": "acf-rest-api",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "author": "<a href='https://theneighbors.co/'>TanaponBB</a>",
     "author_profile": "https://theneighbors.co/",
     "homepage": "https://theneighbors.co/",
@@ -15,7 +15,7 @@
     "sections": {
         "description": "<p>Extends WordPress REST API with ACF Options and GTM Tracking endpoints.</p>",
         "installation": "<ol><li>Upload the plugin files</li><li>Activate the plugin</li><li>Ensure ACF is installed</li></ol>",
-        "changelog": "<h4>1.4.0</h4><ul><li>Added Signed URL support for secure downloads</li><li>Improved auto-update system</li></ul><h4>1.3.4</h4><ul><li>Fixed GTM Options Page not being created</li></ul>"
+        "changelog": "<h4>1.4.1</h4><ul><li>Added Signed URL support for secure downloads</li><li>Improved auto-update system</li></ul><h4>1.3.4</h4><ul><li>Fixed GTM Options Page not being created</li></ul>"
     },
-    "upgrade_notice": "Version 1.4.0 - Secure download system with Signed URLs."
+    "upgrade_notice": "Version 1.4.1 - Secure download system with Signed URLs."
 }
