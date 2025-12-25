@@ -5,10 +5,10 @@
 # Prerequisites:
 #   1. Secret "plugin-signer-key" ใน Secret Manager
 #   2. Cloud Build มีสิทธิ์เข้าถึง Secret
-#   3. plugin-signer SA มีสิทธิ์ Storage Object Viewer
+#   3. SA มีสิทธิ์ Storage Object Viewer + Admin
 #
 # Substitution Variables (ตั้งใน Trigger):
-#   _BUCKET: simplybuild-wp
+#   _BUCKET: wp-signed-urls
 #   _PLUGIN_SLUG: acf-rest-api
 #
 # =============================================================================
@@ -66,19 +66,26 @@ steps:
         echo "$$SA_KEY" > /tmp/sa-key.json
 
         # Generate Signed URL (24 hours)
-        SIGNED_URL=$$(gsutil signurl -d 24h /tmp/sa-key.json \
-          gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip 2>/dev/null \
-          | tail -1 | awk '{print $$NF}')
+        # Output format: "gs://bucket/path  GET  2025-12-26 11:33:40  https://..."
+        SIGNURL_OUTPUT=$$(gsutil signurl -d 24h /tmp/sa-key.json \
+          gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip 2>&1)
+        
+        # Extract URL - it's the last field containing https://
+        SIGNED_URL=$$(echo "$$SIGNURL_OUTPUT" | grep "https://" | grep -oP 'https://[^\s]+')
 
-        # Clean up
+        # Clean up key
         rm -f /tmp/sa-key.json
 
+        # Validate URL
         if [ -z "$$SIGNED_URL" ]; then
           echo "❌ ERROR: Failed to generate signed URL"
+          echo "Output was:"
+          echo "$$SIGNURL_OUTPUT"
           exit 1
         fi
 
-        echo "✅ Signed URL generated"
+        echo "✅ Signed URL generated successfully"
+        echo "   URL length: $${#SIGNED_URL} characters"
 
         EXPIRY_DATE=$$(date -u -d '+1 days' '+%Y-%m-%d %H:%M:%S')
         CURRENT_DATE=$$(date -u '+%Y-%m-%d %H:%M:%S')
@@ -95,7 +102,7 @@ steps:
            build/plugin-info.json > build/tmp.json && mv build/tmp.json build/plugin-info.json
 
         echo ""
-        echo "📄 plugin-info.json:"
+        echo "📄 plugin-info.json preview:"
         cat build/plugin-info.json | jq '{version, download_url_expires}'
 
   # Step 4: Upload plugin-info.json (PUBLIC)
