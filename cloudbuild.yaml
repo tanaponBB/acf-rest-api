@@ -1,3 +1,18 @@
+# =============================================================================
+# Cloud Build - Signed URLs (หมดอายุ 1 วัน)
+# =============================================================================
+#
+# Prerequisites:
+#   1. Secret "plugin-signer-key" ใน Secret Manager
+#   2. Cloud Build มีสิทธิ์เข้าถึง Secret
+#   3. plugin-signer SA มีสิทธิ์ Storage Object Viewer
+#
+# Substitution Variables (ตั้งใน Trigger):
+#   _BUCKET: simplybuild-wp
+#   _PLUGIN_SLUG: acf-rest-api
+#
+# =============================================================================
+
 steps:
   # Step 1: Build Plugin ZIP
   - name: 'gcr.io/cloud-builders/gcloud'
@@ -9,19 +24,19 @@ steps:
 
         VERSION=$$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}.php | head -1)
         echo "========================================="
-        echo "Building version: $$VERSION"
+        echo "🔨 Building version: $$VERSION"
         echo "========================================="
 
         mkdir -p build/${_PLUGIN_SLUG}
-
         cp ${_PLUGIN_SLUG}.php build/${_PLUGIN_SLUG}/
         cp -r includes build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         cp readme.txt build/${_PLUGIN_SLUG}/ 2>/dev/null || true
 
         cd build
         zip -r ${_PLUGIN_SLUG}.zip ${_PLUGIN_SLUG}
-
         echo "$$VERSION" > version.txt
+
+        echo "✅ ZIP created"
 
   # Step 2: Upload ZIP (PRIVATE)
   - name: 'gcr.io/cloud-builders/gsutil'
@@ -29,57 +44,47 @@ steps:
     args:
       - '-c'
       - |
-        echo "Uploading ZIP to PRIVATE bucket..."
-
+        echo "📤 Uploading ZIP to PRIVATE bucket..."
         gsutil -h "Cache-Control:no-cache, max-age=0" \
           cp build/${_PLUGIN_SLUG}.zip \
           gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip
-
         echo "✅ ZIP uploaded (PRIVATE)"
 
-  # Step 3: Generate Signed URL (1 DAY EXPIRY)
-  - name: 'gcr.io/cloud-builders/gcloud'
+  # Step 3: Generate Signed URL (1 day expiry)
+  - name: 'gcr.io/cloud-builders/gsutil'
     entrypoint: 'bash'
+    secretEnv: ['SA_KEY']
     args:
       - '-c'
       - |
-        apt-get update && apt-get install -y jq python3 python3-pip
-        pip3 install google-cloud-storage --quiet
+        apt-get update && apt-get install -y jq
 
         VERSION=$$(cat build/version.txt)
+        echo "🔐 Generating Signed URL (1 day expiry)..."
 
-        echo "Generating Signed URL (1 day expiry)..."
+        # Save SA key to temp file
+        echo "$$SA_KEY" > /tmp/sa-key.json
 
-        cat > /tmp/sign_url.py << 'EOF'
-        import datetime
-        import sys
-        from google.cloud import storage
+        # Generate Signed URL (24 hours)
+        SIGNED_URL=$$(gsutil signurl -d 24h /tmp/sa-key.json \
+          gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip 2>/dev/null \
+          | tail -1 | awk '{print $$NF}')
 
-        bucket_name = sys.argv[1]
-        blob_path = sys.argv[2]
+        # Clean up
+        rm -f /tmp/sa-key.json
 
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob(blob_path)
+        if [ -z "$$SIGNED_URL" ]; then
+          echo "❌ ERROR: Failed to generate signed URL"
+          exit 1
+        fi
 
-        # ========== 1 DAY EXPIRY ==========
-        url = blob.generate_signed_url(
-            version="v4",
-            expiration=datetime.timedelta(days=1),
-            method="GET",
-        )
-
-        print(url)
-        EOF
-
-        SIGNED_URL=$$(python3 /tmp/sign_url.py "${_BUCKET}" "${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip")
+        echo "✅ Signed URL generated"
 
         EXPIRY_DATE=$$(date -u -d '+1 days' '+%Y-%m-%d %H:%M:%S')
         CURRENT_DATE=$$(date -u '+%Y-%m-%d %H:%M:%S')
+        echo "   Expires: $$EXPIRY_DATE UTC"
 
-        echo "✅ Signed URL generated"
-        echo "   Expires: $$EXPIRY_DATE UTC (1 day)"
-
+        # Update plugin-info.json
         cp plugin-info.json build/ 2>/dev/null || echo '{}' > build/plugin-info.json
 
         jq --arg v "$$VERSION" \
@@ -90,8 +95,8 @@ steps:
            build/plugin-info.json > build/tmp.json && mv build/tmp.json build/plugin-info.json
 
         echo ""
-        echo "Updated plugin-info.json:"
-        cat build/plugin-info.json | jq '{version, last_updated, download_url_expires}'
+        echo "📄 plugin-info.json:"
+        cat build/plugin-info.json | jq '{version, download_url_expires}'
 
   # Step 4: Upload plugin-info.json (PUBLIC)
   - name: 'gcr.io/cloud-builders/gsutil'
@@ -99,8 +104,7 @@ steps:
     args:
       - '-c'
       - |
-        echo "Uploading plugin-info.json (PUBLIC)..."
-
+        echo "📤 Uploading plugin-info.json..."
         gsutil -h "Cache-Control:no-cache, max-age=0" \
           -h "Content-Type:application/json" \
           cp build/plugin-info.json \
@@ -112,11 +116,16 @@ steps:
         echo "========================================="
         echo "🎉 Deployment Complete!"
         echo "========================================="
-        echo ""
         echo "• ZIP: PRIVATE (Signed URL only)"
         echo "• URL expires: 1 day"
-        echo "• Auto-refresh: Every 12 hours"
+        echo "• plugin-info.json: PUBLIC"
         echo "========================================="
+
+# Secret from Secret Manager
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/plugin-signer-key/versions/latest
+      env: 'SA_KEY'
 
 options:
   logging: CLOUD_LOGGING_ONLY
