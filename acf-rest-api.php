@@ -25,7 +25,7 @@ define('ACF_REST_API_PLUGIN_URL', plugin_dir_url(__FILE__));
  * Auto-Update Configuration
  */
 if (!defined('ACF_REST_API_UPDATE_URL')) {
-    define('ACF_REST_API_UPDATE_URL', 'https://storage.googleapis.com/wp-signed-urls/acf-rest-api/plugin-info.json');
+    define('ACF_REST_API_UPDATE_URL', 'https://storage.googleapis.com/wp_plugin_bucket/acf-rest-api/plugin-info.json');
 }
 
 /**
