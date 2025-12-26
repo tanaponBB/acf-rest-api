@@ -1,18 +1,3 @@
-# =============================================================================
-# Cloud Build - Signed URLs (หมดอายุ 1 วัน)
-# =============================================================================
-#
-# Prerequisites:
-#   1. Secret "plugin-signer-key" ใน Secret Manager
-#   2. Cloud Build มีสิทธิ์เข้าถึง Secret
-#   3. SA มีสิทธิ์ Storage Object Viewer + Admin
-#
-# Substitution Variables (ตั้งใน Trigger):
-#   _BUCKET: wp-signed-urls
-#   _PLUGIN_SLUG: acf-rest-api
-#
-# =============================================================================
-
 steps:
   # Step 1: Build Plugin ZIP
   - name: "gcr.io/cloud-builders/gcloud"
@@ -66,8 +51,9 @@ steps:
         echo "$$SA_KEY" > /tmp/sa-key.json
 
         # Generate Signed URL (24 hours)
-        # Output format: "gs://bucket/path  GET  2025-12-26 11:33:40  https://..."
-        SIGNURL_OUTPUT=$$(gsutil signurl -d 24h /tmp/sa-key.json \
+        # FIX APPLIED: Added "-r asia-southeast1" to bypass metadata permission check.
+        # If your bucket is in the US, change "asia-southeast1" to "US" or "us-central1".
+        SIGNURL_OUTPUT=$$(gsutil signurl -r asia-southeast1 -d 24h /tmp/sa-key.json \
           gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip 2>&1)
         
         # Extract URL - it's the last field containing https://
