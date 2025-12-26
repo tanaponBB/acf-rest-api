@@ -2,11 +2,12 @@
 /**
  * Plugin Name: REST API Extended
  * Plugin URI: https://theneighbors.co/
- * Description: Extends WordPress REST API with ACF Options and GTM Tracking endpoints.
- * Version: 1.5.0
+ * Description: Extends WordPress REST API with ACF Options and GTM Tracking endpoints. Provides GET/POST routes for managing ACF option fields and GTM tracking settings.
+ * Version: 1.4.2
  * Author: TanaponBB
  * Author URI: https://theneighbors.co/
  * Text Domain: acf-rest-api
+ * Domain Path: /languages
  * Requires at least: 5.8
  * Requires PHP: 7.4
  */
@@ -16,20 +17,15 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin constants
-define('ACF_REST_API_VERSION', '1.5.0');
+define('ACF_REST_API_VERSION', '1.4.2');
 define('ACF_REST_API_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ACF_REST_API_PLUGIN_URL', plugin_dir_url(__FILE__));
 
 /**
- * Auto-Update Configuration (Obfuscated)
- * URL is not visible in plain text - loaded from config class
+ * Auto-Update Configuration
  */
 if (!defined('ACF_REST_API_UPDATE_URL')) {
-    // Load config class first
-    require_once ACF_REST_API_PLUGIN_DIR . 'includes/class-config.php';
-    
-    // Get URL from obfuscated config
-    define('ACF_REST_API_UPDATE_URL', ACF_REST_API_Config::get_update_url());
+    define('ACF_REST_API_UPDATE_URL', 'https://storage.googleapis.com/wp-signed-urls/acf-rest-api/plugin-info.json');
 }
 
 /**
@@ -56,6 +52,7 @@ class ACF_REST_API_Plugin {
         add_action('init', [$this, 'init_components']);
         add_action('rest_api_init', [$this, 'register_rest_routes']);
         add_action('admin_notices', [$this, 'check_dependencies']);
+        add_action('admin_notices', [$this, 'show_update_check_notice']);
     }
 
     public function load_dependencies() {
@@ -121,13 +118,33 @@ class ACF_REST_API_Plugin {
         }
     }
 
+    public function show_update_check_notice() {
+        if (isset($_GET['acf_rest_api_checked'])) {
+            ?>
+            <div class="notice notice-success is-dismissible">
+                <p>
+                    <strong><?php _e('REST API Extended:', 'acf-rest-api'); ?></strong>
+                    <?php _e('Update check completed. If an update is available, it will appear below.', 'acf-rest-api'); ?>
+                </p>
+            </div>
+            <?php
+        }
+    }
+
     public static function activate() {
+        if (function_exists('acf_add_options_page')) {
+            self::create_options_pages();
+        }
         flush_rewrite_rules();
     }
 
     public static function deactivate() {
         delete_transient('acf_rest_api_update_data');
         flush_rewrite_rules();
+    }
+
+    private static function create_options_pages() {
+        // Handled by GTM Tracking class
     }
 }
 
