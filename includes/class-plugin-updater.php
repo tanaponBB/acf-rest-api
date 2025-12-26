@@ -3,7 +3,7 @@
  * Plugin Auto-Updater with Signed URL Support
  *
  * @package ACF_REST_API
- * @since 1.4.1
+ * @since 1.5.0
  */
 
 if (!defined('ABSPATH')) {
