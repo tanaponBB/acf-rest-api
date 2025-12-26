@@ -1,68 +1,102 @@
+# =============================================================================
+# Cloud Build - Signed URLs (หมดอายุ 1 วัน)
+# =============================================================================
+#
+# Prerequisites:
+#   1. Secret "plugin-signed-sc" ใน Secret Manager
+#   2. Cloud Build SA มีสิทธิ์เข้าถึง Secret
+#   3. Cloud Build SA มีสิทธิ์ Storage Object Admin บน Bucket
+#   4. Bucket ต้องปิด "Public Access Prevention" (ทำครั้งเดียวใน UI)
+#
+# Substitution Variables (ตั้งใน Trigger):
+#   _BUCKET: wp_plugin_bucket
+#   _PLUGIN_SLUG: acf-rest-api
+#
+# =============================================================================
+
 steps:
-  # Step 1: Build Plugin ZIP
+  # ===========================================================================
+  # Step 0: Build Plugin ZIP
+  # ===========================================================================
   - name: "gcr.io/cloud-builders/gcloud"
     entrypoint: "bash"
     args:
       - "-c"
       - |
+        # Install dependencies
         apt-get update && apt-get install -y zip jq
 
+        # Get version from main plugin file
         VERSION=$$(grep -oP "Version:\s*\K[0-9.]+" ${_PLUGIN_SLUG}.php | head -1)
+        
         echo "========================================="
         echo "🔨 Building version: $$VERSION"
         echo "========================================="
 
+        # Create build directory
         mkdir -p build/${_PLUGIN_SLUG}
+        
+        # Copy plugin files
         cp ${_PLUGIN_SLUG}.php build/${_PLUGIN_SLUG}/
         cp -r includes build/${_PLUGIN_SLUG}/ 2>/dev/null || true
         cp readme.txt build/${_PLUGIN_SLUG}/ 2>/dev/null || true
 
+        # Create ZIP
         cd build
         zip -r ${_PLUGIN_SLUG}.zip ${_PLUGIN_SLUG}
+        
+        # Save version for next steps
         echo "$$VERSION" > version.txt
 
-        echo "✅ ZIP created"
+        echo "✅ ZIP created: ${_PLUGIN_SLUG}.zip"
 
-  # Step 2: Upload ZIP (PRIVATE)
+  # ===========================================================================
+  # Step 1: Upload ZIP to Bucket (PRIVATE)
+  # ===========================================================================
   - name: "gcr.io/cloud-builders/gsutil"
     entrypoint: "bash"
     args:
       - "-c"
       - |
         echo "📤 Uploading ZIP to PRIVATE bucket..."
+        
         gsutil -h "Cache-Control:no-cache, max-age=0" \
           cp build/${_PLUGIN_SLUG}.zip \
           gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip
-        echo "✅ ZIP uploaded (PRIVATE)"
+        
+        echo "✅ ZIP uploaded (PRIVATE - no public access)"
 
-  # Step 3: Generate Signed URL (1 day expiry)
+  # ===========================================================================
+  # Step 2: Generate Signed URL (1 day expiry)
+  # ===========================================================================
   - name: "gcr.io/cloud-builders/gsutil"
     entrypoint: "bash"
     secretEnv: ["SA_KEY"]
     args:
       - "-c"
       - |
+        # Install jq for JSON processing
         apt-get update && apt-get install -y jq
 
         VERSION=$$(cat build/version.txt)
+        
         echo "🔐 Generating Signed URL (1 day expiry)..."
 
         # Save SA key to temp file
         echo "$$SA_KEY" > /tmp/sa-key.json
 
         # Generate Signed URL (24 hours)
-        # FIX APPLIED: Added "-r asia-southeast1" to bypass metadata permission check.
-        # If your bucket is in the US, change "asia-southeast1" to "US" or "us-central1".
+        # -r flag specifies region to avoid metadata lookup permission issues
         SIGNURL_OUTPUT=$$(gsutil signurl -r asia-southeast1 -d 24h /tmp/sa-key.json \
           gs://${_BUCKET}/${_PLUGIN_SLUG}/${_PLUGIN_SLUG}.zip 2>&1)
-        
-        # Extract URL - it's the last field containing https://
+
+        # Extract URL from output
         SIGNED_URL=$$(echo "$$SIGNURL_OUTPUT" | grep "https://" | grep -oP 'https://[^\s]+')
 
-        # Clean up key
+        # Clean up - remove key file immediately
         rm -f /tmp/sa-key.json
 
-        # Validate URL
+        # Validate URL was generated
         if [ -z "$$SIGNED_URL" ]; then
           echo "❌ ERROR: Failed to generate signed URL"
           echo "Output was:"
@@ -73,11 +107,12 @@ steps:
         echo "✅ Signed URL generated successfully"
         echo "   URL length: $${#SIGNED_URL} characters"
 
+        # Calculate dates
         EXPIRY_DATE=$$(date -u -d '+1 days' '+%Y-%m-%d %H:%M:%S')
         CURRENT_DATE=$$(date -u '+%Y-%m-%d %H:%M:%S')
         echo "   Expires: $$EXPIRY_DATE UTC"
 
-        # Update plugin-info.json
+        # Update plugin-info.json with new values
         cp plugin-info.json build/ 2>/dev/null || echo '{}' > build/plugin-info.json
 
         jq --arg v "$$VERSION" \
@@ -91,18 +126,24 @@ steps:
         echo "📄 plugin-info.json preview:"
         cat build/plugin-info.json | jq '{version, download_url_expires}'
 
-  # Step 4: Upload plugin-info.json (PUBLIC)
+  # ===========================================================================
+  # Step 3: Upload plugin-info.json (PUBLIC)
+  # ===========================================================================
   - name: "gcr.io/cloud-builders/gsutil"
     entrypoint: "bash"
     args:
       - "-c"
       - |
         echo "📤 Uploading plugin-info.json..."
+        
+        # Upload with no-cache headers
         gsutil -h "Cache-Control:no-cache, max-age=0" \
           -h "Content-Type:application/json" \
           cp build/plugin-info.json \
           gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json
 
+        # Make plugin-info.json publicly readable
+        # Note: Bucket must have "Public Access Prevention" disabled for this to work
         gsutil acl ch -u AllUsers:R gs://${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json
 
         echo ""
@@ -112,14 +153,22 @@ steps:
         echo "• ZIP: PRIVATE (Signed URL only)"
         echo "• URL expires: 1 day"
         echo "• plugin-info.json: PUBLIC"
+        echo ""
+        echo "📍 Plugin Info URL:"
+        echo "   https://storage.googleapis.com/${_BUCKET}/${_PLUGIN_SLUG}/plugin-info.json"
         echo "========================================="
 
+# =============================================================================
 # Secret from Secret Manager
+# =============================================================================
 availableSecrets:
   secretManager:
     - versionName: projects/$PROJECT_ID/secrets/plugin-signed-sc/versions/latest
       env: "SA_KEY"
 
+# =============================================================================
+# Build Options
+# =============================================================================
 options:
   logging: CLOUD_LOGGING_ONLY
 
