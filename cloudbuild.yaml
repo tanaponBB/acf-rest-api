@@ -163,7 +163,7 @@ steps:
 # =============================================================================
 availableSecrets:
   secretManager:
-    - versionName: projects/$PROJECT_ID/secrets/plugin-signed-sc/versions/latest
+    - versionName: projects/$PROJECT_ID/secrets/REST-API-PLUGIN/versions/latest
       env: "SA_KEY"
 
 # =============================================================================
