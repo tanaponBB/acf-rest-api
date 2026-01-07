@@ -61,7 +61,7 @@ class ACF_REST_WC_Tax_Options_Settings
      */
     public function is_woocommerce_active()
     {
-        return class_exists('WooCommerce');
+        return class_exists('WooCommerce') && class_exists('WC_Tax');
     }
 
     /**
@@ -271,7 +271,183 @@ class ACF_REST_WC_Tax_Options_Settings
     }
 
     /**
-     * Update tax options
+     * Create a new tax class
+     *
+     * @param string $tax_class_name Tax class name
+     * @return array Result with success status
+     */
+    public function create_tax_class($tax_class_name)
+    {
+        if (!$this->is_woocommerce_active()) {
+            return [
+                'success' => false,
+                'message' => __('WooCommerce is not active', 'acf-rest-api'),
+            ];
+        }
+
+        $tax_class_name = sanitize_text_field($tax_class_name);
+        
+        if (empty($tax_class_name)) {
+            return [
+                'success' => false,
+                'message' => __('Tax class name cannot be empty', 'acf-rest-api'),
+            ];
+        }
+
+        // Check if tax class already exists
+        $existing_classes = WC_Tax::get_tax_classes();
+        $slug = sanitize_title($tax_class_name);
+        
+        foreach ($existing_classes as $existing) {
+            if (sanitize_title($existing) === $slug) {
+                return [
+                    'success' => false,
+                    'message' => sprintf(__('Tax class "%s" already exists', 'acf-rest-api'), $tax_class_name),
+                    'slug'    => $slug,
+                ];
+            }
+        }
+
+        // Use WooCommerce's method to create tax class (WC 3.0+)
+        if (method_exists('WC_Tax', 'create_tax_class')) {
+            $result = WC_Tax::create_tax_class($tax_class_name);
+            
+            if (is_wp_error($result)) {
+                return [
+                    'success' => false,
+                    'message' => $result->get_error_message(),
+                ];
+            }
+
+            // Clear tax class cache
+            WC_Cache_Helper::invalidate_cache_group('taxes');
+            delete_transient('wc_tax_classes');
+
+            return [
+                'success' => true,
+                'message' => sprintf(__('Tax class "%s" created successfully', 'acf-rest-api'), $tax_class_name),
+                'slug'    => $result['slug'],
+                'name'    => $result['name'],
+            ];
+        }
+
+        // Fallback for older WooCommerce versions - update the option directly
+        $existing_classes[] = $tax_class_name;
+        $value = implode("\n", array_filter(array_map('trim', $existing_classes)));
+        
+        if (update_option(self::OPTION_TAX_CLASSES, $value)) {
+            // Clear tax class cache
+            WC_Cache_Helper::invalidate_cache_group('taxes');
+            delete_transient('wc_tax_classes');
+
+            return [
+                'success' => true,
+                'message' => sprintf(__('Tax class "%s" created successfully', 'acf-rest-api'), $tax_class_name),
+                'slug'    => $slug,
+                'name'    => $tax_class_name,
+            ];
+        }
+
+        return [
+            'success' => false,
+            'message' => __('Failed to create tax class', 'acf-rest-api'),
+        ];
+    }
+
+    /**
+     * Delete a tax class
+     *
+     * @param string $tax_class_slug Tax class slug to delete
+     * @return array Result with success status
+     */
+    public function delete_tax_class($tax_class_slug)
+    {
+        if (!$this->is_woocommerce_active()) {
+            return [
+                'success' => false,
+                'message' => __('WooCommerce is not active', 'acf-rest-api'),
+            ];
+        }
+
+        $tax_class_slug = sanitize_title($tax_class_slug);
+        
+        if (empty($tax_class_slug) || $tax_class_slug === 'standard') {
+            return [
+                'success' => false,
+                'message' => __('Cannot delete standard tax class', 'acf-rest-api'),
+            ];
+        }
+
+        // Use WooCommerce's method to delete tax class (WC 3.0+)
+        if (method_exists('WC_Tax', 'delete_tax_class_by')) {
+            $result = WC_Tax::delete_tax_class_by('slug', $tax_class_slug);
+            
+            if (is_wp_error($result)) {
+                return [
+                    'success' => false,
+                    'message' => $result->get_error_message(),
+                ];
+            }
+
+            // Clear tax class cache
+            WC_Cache_Helper::invalidate_cache_group('taxes');
+            delete_transient('wc_tax_classes');
+
+            return [
+                'success' => true,
+                'message' => sprintf(__('Tax class "%s" deleted successfully', 'acf-rest-api'), $tax_class_slug),
+            ];
+        }
+
+        // Fallback for older WooCommerce versions
+        $existing_classes = WC_Tax::get_tax_classes();
+        $new_classes = [];
+        $found = false;
+        
+        foreach ($existing_classes as $existing) {
+            if (sanitize_title($existing) === $tax_class_slug) {
+                $found = true;
+                continue;
+            }
+            $new_classes[] = $existing;
+        }
+        
+        if (!$found) {
+            return [
+                'success' => false,
+                'message' => sprintf(__('Tax class "%s" not found', 'acf-rest-api'), $tax_class_slug),
+            ];
+        }
+
+        $value = implode("\n", array_filter(array_map('trim', $new_classes)));
+        
+        if (update_option(self::OPTION_TAX_CLASSES, $value)) {
+            // Also delete any tax rates associated with this class
+            global $wpdb;
+            $wpdb->delete(
+                $wpdb->prefix . 'woocommerce_tax_rates',
+                ['tax_rate_class' => $tax_class_slug],
+                ['%s']
+            );
+
+            // Clear tax class cache
+            WC_Cache_Helper::invalidate_cache_group('taxes');
+            delete_transient('wc_tax_classes');
+
+            return [
+                'success' => true,
+                'message' => sprintf(__('Tax class "%s" deleted successfully', 'acf-rest-api'), $tax_class_slug),
+            ];
+        }
+
+        return [
+            'success' => false,
+            'message' => __('Failed to delete tax class', 'acf-rest-api'),
+        ];
+    }
+
+    /**
+     * Update all tax options
      *
      * @param array $data Options to update
      * @return array
@@ -397,18 +573,19 @@ class ACF_REST_WC_Tax_Options_Settings
             }
         }
 
-        // Update tax_classes - Note: This is complex as it requires updating tax rates
+        // Update tax_classes - Handle adding new classes properly
         if (isset($data['tax_classes'])) {
-            // WooCommerce stores additional tax classes as newline-separated string
-            if (is_array($data['tax_classes'])) {
-                $classes = array_map('sanitize_text_field', $data['tax_classes']);
-                $value = implode("\n", $classes);
+            $result = $this->update_tax_classes($data['tax_classes']);
+            if ($result['success']) {
+                $updated['tax_classes'] = $result['classes'];
+                if (!empty($result['created'])) {
+                    $updated['tax_classes_created'] = $result['created'];
+                }
+                if (!empty($result['deleted'])) {
+                    $updated['tax_classes_deleted'] = $result['deleted'];
+                }
             } else {
-                $value = sanitize_textarea_field($data['tax_classes']);
-            }
-
-            if (update_option(self::OPTION_TAX_CLASSES, $value)) {
-                $updated['tax_classes'] = $value;
+                $errors['tax_classes'] = $result['message'];
             }
         }
 
@@ -425,6 +602,95 @@ class ACF_REST_WC_Tax_Options_Settings
             'message'     => empty($errors)
                 ? __('Tax options have been updated.', 'acf-rest-api')
                 : __('Some options could not be updated.', 'acf-rest-api'),
+        ];
+    }
+
+    /**
+     * Update tax classes - properly handles adding and removing classes
+     *
+     * @param mixed $new_classes Array or newline-separated string of class names
+     * @return array Result with success status
+     */
+    private function update_tax_classes($new_classes)
+    {
+        // Parse input
+        if (is_array($new_classes)) {
+            $new_classes = array_filter(array_map('trim', $new_classes));
+        } else {
+            $new_classes = array_filter(array_map('trim', explode("\n", $new_classes)));
+        }
+
+        // Get current classes
+        $current_classes = WC_Tax::get_tax_classes();
+        
+        // Find classes to add
+        $classes_to_add = [];
+        foreach ($new_classes as $class) {
+            $slug = sanitize_title($class);
+            $found = false;
+            foreach ($current_classes as $current) {
+                if (sanitize_title($current) === $slug) {
+                    $found = true;
+                    break;
+                }
+            }
+            if (!$found && !empty($class)) {
+                $classes_to_add[] = $class;
+            }
+        }
+
+        // Find classes to remove
+        $classes_to_remove = [];
+        $new_class_slugs = array_map('sanitize_title', $new_classes);
+        foreach ($current_classes as $current) {
+            if (!in_array(sanitize_title($current), $new_class_slugs, true)) {
+                $classes_to_remove[] = $current;
+            }
+        }
+
+        $created = [];
+        $deleted = [];
+        $errors = [];
+
+        // Add new classes
+        foreach ($classes_to_add as $class_name) {
+            $result = $this->create_tax_class($class_name);
+            if ($result['success']) {
+                $created[] = [
+                    'name' => $class_name,
+                    'slug' => $result['slug'],
+                ];
+            } else {
+                $errors[] = $result['message'];
+            }
+        }
+
+        // Remove old classes (optional - only if explicitly requested)
+        // Note: We're NOT auto-deleting classes to prevent accidental data loss
+        // If you want to enable auto-delete, uncomment the following:
+        /*
+        foreach ($classes_to_remove as $class_name) {
+            $result = $this->delete_tax_class(sanitize_title($class_name));
+            if ($result['success']) {
+                $deleted[] = $class_name;
+            } else {
+                $errors[] = $result['message'];
+            }
+        }
+        */
+
+        // Get final list of classes
+        $final_classes = WC_Tax::get_tax_classes();
+
+        return [
+            'success' => empty($errors),
+            'classes' => $final_classes,
+            'created' => $created,
+            'deleted' => $deleted,
+            'errors'  => $errors,
+            'message' => empty($errors) 
+                ? __('Tax classes updated successfully', 'acf-rest-api')
+                : implode(', ', $errors),
         ];
     }
 
@@ -554,6 +820,78 @@ class ACF_REST_WC_Tax_Options_Settings
                 'message' => $result['message'],
             ],
         ], $status_code);
+    }
+
+    /**
+     * REST API POST handler - Create tax class
+     *
+     * @param WP_REST_Request $request Request object
+     * @return WP_REST_Response
+     */
+    public function rest_create_tax_class_handler($request)
+    {
+        $name = $request->get_param('name');
+
+        if (empty($name)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => __('Tax class name is required', 'acf-rest-api'),
+                'code'    => 'missing_parameter',
+            ], 400);
+        }
+
+        $result = $this->create_tax_class($name);
+
+        if (!$result['success']) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => $result['message'],
+                'code'    => 'create_failed',
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data'    => [
+                'slug' => $result['slug'],
+                'name' => $result['name'],
+            ],
+            'message' => $result['message'],
+        ], 201);
+    }
+
+    /**
+     * REST API DELETE handler - Delete tax class
+     *
+     * @param WP_REST_Request $request Request object
+     * @return WP_REST_Response
+     */
+    public function rest_delete_tax_class_handler($request)
+    {
+        $slug = $request->get_param('slug');
+
+        if (empty($slug)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => __('Tax class slug is required', 'acf-rest-api'),
+                'code'    => 'missing_parameter',
+            ], 400);
+        }
+
+        $result = $this->delete_tax_class($slug);
+
+        if (!$result['success']) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => $result['message'],
+                'code'    => 'delete_failed',
+            ], 400);
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => $result['message'],
+        ], 200);
     }
 
     /**

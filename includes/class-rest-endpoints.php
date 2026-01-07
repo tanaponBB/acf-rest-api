@@ -194,6 +194,34 @@ class ACF_REST_Endpoints {
             'permission_callback' => [$wc_tax_options, 'check_write_permission'],
             'args'                => $this->get_wc_tax_options_post_args(),
         ]);
+
+        // POST /woocommerce-ext/v1/taxes-options/classes - Create tax class
+        register_rest_route(self::WC_NAMESPACE, '/taxes-options/classes', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$wc_tax_options, 'rest_create_tax_class_handler'],
+            'permission_callback' => [$wc_tax_options, 'check_write_permission'],
+            'args'                => [
+                'name' => [
+                    'description' => __('Tax class name', 'acf-rest-api'),
+                    'type'        => 'string',
+                    'required'    => true,
+                ],
+            ],
+        ]);
+
+        // DELETE /woocommerce-ext/v1/taxes-options/classes/{slug} - Delete tax class
+        register_rest_route(self::WC_NAMESPACE, '/taxes-options/classes/(?P<slug>[a-z0-9-]+)', [
+            'methods'             => WP_REST_Server::DELETABLE,
+            'callback'            => [$wc_tax_options, 'rest_delete_tax_class_handler'],
+            'permission_callback' => [$wc_tax_options, 'check_write_permission'],
+            'args'                => [
+                'slug' => [
+                    'description' => __('Tax class slug', 'acf-rest-api'),
+                    'type'        => 'string',
+                    'required'    => true,
+                ],
+            ],
+        ]);
     }
 
     /**
