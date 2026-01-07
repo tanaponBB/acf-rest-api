@@ -12,28 +12,50 @@ REST API endpoints for managing WooCommerce Coupon, Tax settings, and Tax Rates.
 
 ## Table of Contents
 
-1. [Coupons](#coupons)
-   - [GET /coupons](#get-coupons)
-   - [POST /coupons](#post-coupons)
-2. [Taxes (Enable/Disable)](#taxes-enabledisable)
-   - [GET /taxes](#get-taxes)
-   - [POST /taxes](#post-taxes)
-3. [Tax Options](#tax-options)
-   - [GET /taxes-options](#get-taxes-options)
-   - [POST /taxes-options](#post-taxes-options)
-4. [Tax Rates](#tax-rates)
-   - [GET /tax-rates](#get-tax-rates)
-   - [GET /tax-rates/{id}](#get-tax-ratesid)
-   - [POST /tax-rates](#post-tax-rates)
-   - [PUT /tax-rates/{id}](#put-tax-ratesid)
-   - [DELETE /tax-rates/{id}](#delete-tax-ratesid)
-   - [POST /tax-rates/batch](#post-tax-ratesbatch)
-   - [POST /tax-rates/import](#post-tax-ratesimport)
-   - [GET /tax-rates/export](#get-tax-ratesexport)
-   - [GET /tax-rates/classes](#get-tax-ratesclasses)
-   - [DELETE /tax-rates/all](#delete-tax-ratesall)
-5. [Error Responses](#error-responses)
-6. [Code Examples](#code-examples)
+- [WooCommerce Settings REST API Documentation](#woocommerce-settings-rest-api-documentation)
+  - [Table of Contents](#table-of-contents)
+  - [Coupons](#coupons)
+    - [GET /coupons](#get-coupons)
+    - [POST /coupons](#post-coupons)
+  - [Taxes (Enable/Disable)](#taxes-enabledisable)
+    - [GET /taxes](#get-taxes)
+    - [POST /taxes](#post-taxes)
+  - [Tax Options](#tax-options)
+    - [GET /taxes-options](#get-taxes-options)
+    - [POST /taxes-options](#post-taxes-options)
+    - [POST /taxes-options/classes](#post-taxes-optionsclasses)
+    - [DELETE /taxes-options/classes/{slug}](#delete-taxes-optionsclassesslug)
+  - [Tax Options Reference](#tax-options-reference)
+    - [prices\_include\_tax](#prices_include_tax)
+    - [tax\_based\_on](#tax_based_on)
+    - [shipping\_tax\_class](#shipping_tax_class)
+    - [tax\_round\_at\_subtotal](#tax_round_at_subtotal)
+    - [tax\_display\_shop / tax\_display\_cart](#tax_display_shop--tax_display_cart)
+    - [tax\_total\_display](#tax_total_display)
+  - [Tax Rates](#tax-rates)
+    - [GET /tax-rates](#get-tax-rates)
+    - [GET /tax-rates/{id}](#get-tax-ratesid)
+    - [POST /tax-rates](#post-tax-rates)
+    - [PUT /tax-rates/{id}](#put-tax-ratesid)
+    - [DELETE /tax-rates/{id}](#delete-tax-ratesid)
+    - [POST /tax-rates/batch](#post-tax-ratesbatch)
+    - [POST /tax-rates/import](#post-tax-ratesimport)
+    - [GET /tax-rates/export](#get-tax-ratesexport)
+    - [GET /tax-rates/classes](#get-tax-ratesclasses)
+    - [DELETE /tax-rates/all](#delete-tax-ratesall)
+  - [Error Responses](#error-responses)
+    - [400 Bad Request](#400-bad-request)
+    - [403 Forbidden](#403-forbidden)
+    - [404 Not Found](#404-not-found)
+  - [Code Examples](#code-examples)
+    - [JavaScript - Import Tax Rates](#javascript---import-tax-rates)
+    - [JavaScript - Export Tax Rates](#javascript---export-tax-rates)
+    - [PHP - Import Tax Rates](#php---import-tax-rates)
+  - [Endpoints Summary](#endpoints-summary)
+  - [Changelog](#changelog)
+    - [Version 1.3.0](#version-130)
+    - [Version 1.2.9](#version-129)
+    - [Version 1.0.0](#version-100)
 
 ---
 
@@ -435,6 +457,104 @@ curl -X POST "https://your-site.com/wp-json/woocommerce-ext/v1/taxes-options" \
     "tax_display_cart": "excl",
     "tax_total_display": "itemized"
   }'
+```
+
+---
+
+### POST /taxes-options/classes
+
+Create a new tax class.
+
+**Endpoint:** `POST /wp-json/woocommerce-ext/v1/taxes-options/classes`
+
+**Headers:**
+```
+Content-Type: application/json
+Authorization: Bearer YOUR_TOKEN
+```
+
+**Request Body:**
+
+| Parameter | Type   | Required | Description        |
+|-----------|--------|----------|--------------------|
+| `name`    | string | Yes      | Tax class name     |
+
+**Request Example:**
+```json
+{
+    "name": "Luxury Items"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+    "success": true,
+    "data": {
+        "slug": "luxury-items",
+        "name": "Luxury Items"
+    },
+    "message": "Tax class \"Luxury Items\" created successfully"
+}
+```
+
+**Response (400 - Already Exists):**
+```json
+{
+    "success": false,
+    "message": "Tax class \"Luxury Items\" already exists",
+    "code": "create_failed"
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST "https://your-site.com/wp-json/woocommerce-ext/v1/taxes-options/classes" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"name": "Luxury Items"}'
+```
+
+---
+
+### DELETE /taxes-options/classes/{slug}
+
+Delete a tax class. **Note:** This will also delete all tax rates associated with the class.
+
+**Endpoint:** `DELETE /wp-json/woocommerce-ext/v1/taxes-options/classes/{slug}`
+
+**Headers:**
+```
+Authorization: Bearer YOUR_TOKEN
+```
+
+**Path Parameters:**
+
+| Parameter | Type   | Required | Description        |
+|-----------|--------|----------|--------------------|
+| `slug`    | string | Yes      | Tax class slug     |
+
+**Response (200 OK):**
+```json
+{
+    "success": true,
+    "message": "Tax class \"luxury-items\" deleted successfully"
+}
+```
+
+**Response (400 - Cannot Delete Standard):**
+```json
+{
+    "success": false,
+    "message": "Cannot delete standard tax class",
+    "code": "delete_failed"
+}
+```
+
+**cURL Example:**
+```bash
+curl -X DELETE "https://your-site.com/wp-json/woocommerce-ext/v1/taxes-options/classes/luxury-items" \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ---
@@ -951,6 +1071,8 @@ $response = wp_remote_post('https://your-site.com/wp-json/woocommerce-ext/v1/tax
 | POST   | `/woocommerce-ext/v1/taxes`          | Enable/disable tax calculations |
 | GET    | `/woocommerce-ext/v1/taxes-options`  | Get all tax options             |
 | POST   | `/woocommerce-ext/v1/taxes-options`  | Update tax options              |
+| POST   | `/woocommerce-ext/v1/taxes-options/classes` | Create new tax class     |
+| DELETE | `/woocommerce-ext/v1/taxes-options/classes/{slug}` | Delete tax class |
 | GET    | `/woocommerce-ext/v1/tax-rates`      | List all tax rates              |
 | POST   | `/woocommerce-ext/v1/tax-rates`      | Create tax rate                 |
 | GET    | `/woocommerce-ext/v1/tax-rates/{id}` | Get single tax rate             |
