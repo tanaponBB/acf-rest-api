@@ -21,10 +21,10 @@ class ACF_REST_API_Config {
     public static function get_update_url() {
         // Encoded URL - not visible in plain text
         $parts = [
-            'aHR0cHM6Ly9zdG9yYWdlLmdvb2dsZWFwaXM',  // Part 1
-            'uY29tL3dwLXNpZ25lZC11cmxzL2FjZi1yZX',  // Part 2
-            'N0LWFwaS9wbHVnaW4taW5mby5qc29u',       // Part 3
-        ];
+            'aHR0cHM6Ly9zdG9yYWdlLmdvb2dsZWFwaXMuY29tL3dwX3Bs',
+            'dWdpbl9idWNrZXQvYWNmLXJlc3QtYXBpL3BsdWdpbi1pbmZv',
+            'Lmpzb24=',
+        ];        
         
         return base64_decode(implode('', $parts));
     }
