@@ -1,7 +1,7 @@
 {
     "name": "REST API Extended",
     "slug": "acf-rest-api",
-    "version": "2.0.0",
+    "version": "2.0.1",
     "author": "<a href='https://theneighbors.co/'>TanaponBB</a>",
     "author_profile": "https://theneighbors.co/",
     "homepage": "https://theneighbors.co/",
@@ -26,5 +26,5 @@
         "1x": "",
         "2x": ""
     },
-    "upgrade_notice": "Version 2.0.0 - Improved Additional tax classes."
+    "upgrade_notice": "Version 2.0.2 - Improved Additional tax classes."
 }
